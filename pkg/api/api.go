@@ -47,19 +47,26 @@ func NewProduct(yamlPath string, templateDir string, overridesDir string) *Produ
 }
 
 func (p *Product) Unmarshal() error {
-	yamlContent, err := os.ReadFile(p.File)
+	yamlData, err := os.ReadFile(p.File)
 	if err != nil {
 		return fmt.Errorf("cannot open product file: %v", p.File)
 	}
 
 	rootNode := yaml.Node{}
-	if err := yaml.Unmarshal(yamlContent, &rootNode); err != nil {
+	if err := yaml.Unmarshal(yamlData, &rootNode); err != nil {
 		return fmt.Errorf("cannot unmarshal product file: %v", p.File)
 	}
 	p.ApplyOverrides(&rootNode)
+
+	// marshal the patched data back into a string
+	patchedData, err := yaml.Marshal(&rootNode)
+	if err != nil {
+		return fmt.Errorf("error marshaling patched data: %v", err)
+	}
+
 	// load main product file
 	yamlValidator := google.YamlValidator{}
-	yamlValidator.Parse(yamlContent, p.ApiPtr, p.File)
+	yamlValidator.Parse(patchedData, p.ApiPtr, p.File)
 
 	return nil
 }
