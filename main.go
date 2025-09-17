@@ -17,7 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/thekad/magic-ansible/pkg/api"
-	tpl "github.com/thekad/magic-ansible/pkg/templates"
+	tpl "github.com/thekad/magic-ansible/pkg/template"
 )
 
 const MMV1_REPO string = "https://github.com/GoogleCloudPlatform/magic-modules"
