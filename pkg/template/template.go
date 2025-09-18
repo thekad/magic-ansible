@@ -12,7 +12,7 @@ import (
 	"text/template"
 
 	"github.com/rs/zerolog/log"
-	"github.com/thekad/magic-ansible/pkg/api"
+	"github.com/thekad/magic-ansible/pkg/ansible"
 )
 
 type TemplateData struct {
@@ -88,7 +88,7 @@ func (td *TemplateData) writeFile(filePath, templateName string, input any) erro
 	return nil
 }
 
-func (td *TemplateData) GenerateCode(resource *api.Resource) error {
+func (td *TemplateData) GenerateCode(resource *ansible.Resource) error {
 	log.Info().Msgf("generating code for resource: %s", resource.AnsibleName())
 
 	if err := os.MkdirAll(td.ModuleDirectory, 0755); err != nil {
@@ -104,7 +104,7 @@ func (td *TemplateData) GenerateCode(resource *api.Resource) error {
 	return nil
 }
 
-func (td *TemplateData) GenerateTests(resource *api.Resource) error {
+func (td *TemplateData) GenerateTests(resource *ansible.Resource) error {
 	log.Info().Msgf("generating tests for resource: %s", resource.AnsibleName())
 
 	if err := os.MkdirAll(td.IntegrationTestDirectory, 0755); err != nil {

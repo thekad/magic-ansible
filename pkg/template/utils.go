@@ -8,15 +8,15 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"text/template"
+	gotpl "text/template"
 	"time"
 
-	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
+	"github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
 )
 
-func funcMap() template.FuncMap {
-	return template.FuncMap{
+func funcMap() gotpl.FuncMap {
+	return gotpl.FuncMap{
 		"eq":             eqFunc,
 		"gt":             gtFunc,
 		"gte":            gteFunc,
@@ -58,8 +58,8 @@ func splitLinesFunc(s string) []string {
 	return lines
 }
 
-func sortPropertiesFunc(props []*mmv1api.Type) []*mmv1api.Type {
-	slices.SortFunc(props, func(a, b *mmv1api.Type) int {
+func sortPropertiesFunc(props []*api.Type) []*api.Type {
+	slices.SortFunc(props, func(a, b *api.Type) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
 	return props
