@@ -51,15 +51,15 @@ type Documentation struct {
 
 func NewDocumentationFromAPI(resource *Resource) *Documentation {
 	urlNotes := []string{
-		fmt.Sprintf("API Reference: U(%s)", resource.Api.References.Api),
-		fmt.Sprintf("Official Documentation: U(%s)", resource.Api.References.Guides["Official Documentation"]),
+		fmt.Sprintf("API Reference: U(%s)", resource.Mmv1.References.Api),
+		fmt.Sprintf("Official Documentation: U(%s)", resource.Mmv1.References.Guides["Official Documentation"]),
 	}
 	resourceNotes := append(urlNotes, STANDARD_AUTH_NOTES...)
 	return &Documentation{
 		Module:           resource.AnsibleName(),
-		ShortDescription: fmt.Sprintf("Creates a GCP %s.%s resource", resource.Parent.Api.Name, resource.Api.Name),
-		Description:      resource.Api.Description,
-		Options:          NewOptionsFromAPI(resource.Api),
+		ShortDescription: fmt.Sprintf("Creates a GCP %s.%s resource", resource.Parent.Mmv1.Name, resource.Mmv1.Name),
+		Description:      resource.Mmv1.Description,
+		Options:          NewOptionsFromAPI(resource.Mmv1),
 		Requirements:     STANDARD_MODULE_REQUIREMENTS,
 		Notes:            resourceNotes,
 	}
