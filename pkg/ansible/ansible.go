@@ -138,7 +138,7 @@ func (r *Resource) Unmarshal() error {
 
 	// once it has successfully unmarshaled, we can generate more pieces of the struct
 	// generate the documentation
-	r.Documentation = NewDocumentationFromAPI(r)
+	r.Documentation = NewDocumentationFromMmv1(r)
 
 	return nil
 }
