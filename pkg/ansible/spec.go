@@ -95,7 +95,7 @@ func NewOptionsFromMmv1(resource *api.Resource) map[string]*Option {
 		},
 		Type:     AnsibleTypeStr,
 		Default:  "present",
-		Required: false,
+		Required: true,
 		Choices:  []interface{}{"present", "absent"},
 	}
 
@@ -121,6 +121,7 @@ func NewOptionsFromMmv1(resource *api.Resource) map[string]*Option {
 			Description: parsePropertyDescription(property),
 			Type:        ansibleType,
 			Required:    property.Required,
+			Default:     property.DefaultValue,
 		}
 
 		// Handle list element types
@@ -189,7 +190,8 @@ func createSuboptions(properties []*api.Type) map[string]*Option {
 		suboption := &Option{
 			Description: parsePropertyDescription(subProp),
 			Type:        subAnsibleType,
-			Required:    false, // Default to optional
+			Required:    subProp.Required,
+			Default:     subProp.DefaultValue,
 		}
 
 		// Handle list element types for suboptions
@@ -232,19 +234,29 @@ func parsePropertyDescription(property *api.Type) []interface{} {
 		description = "No description available."
 	}
 
+	// cleanup description from magic-modules
+	description = strings.TrimPrefix(description, "Required. ")  // there's a specific "required" field
+	description = strings.TrimPrefix(description, "Optional. ")  // the absence of "required" field means optional
+	description = strings.TrimPrefix(description, "Immutable. ") // a note is added to the description if the property is immutable
+
 	// Split description into lines and clean them up
-	lines := strings.Split(description, "\n")
+	lines := strings.Split(description, ". ")
 	var cleanLines []interface{}
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
+		trimmed = fmt.Sprintf("%s.", strings.TrimSuffix(trimmed, "."))
 		if trimmed != "" {
 			cleanLines = append(cleanLines, trimmed)
 		}
 	}
 
 	if len(cleanLines) == 0 {
-		return []interface{}{"No description available."}
+		cleanLines = []interface{}{"No description available."}
+	}
+
+	if property.Immutable {
+		cleanLines = append(cleanLines, "This property is immutable, to change it, you must delete and recreate the resource.")
 	}
 
 	return cleanLines
