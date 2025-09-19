@@ -91,6 +91,7 @@ type Resource struct {
 	TemplateDir   string
 	OverridesDir  string
 	Documentation *Documentation
+	Returns       map[string]*ReturnAttribute
 }
 
 // NewResource is a constructor that returns an initialized Resource type
@@ -139,6 +140,9 @@ func (r *Resource) Unmarshal() error {
 	// once it has successfully unmarshaled, we can generate more pieces of the struct
 	// generate the documentation
 	r.Documentation = NewDocumentationFromMmv1(r)
+
+	// generate the return block
+	r.Returns = BuildReturnBlockFromMmv1(r.Mmv1)
 
 	return nil
 }
