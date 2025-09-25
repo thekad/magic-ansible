@@ -28,7 +28,7 @@ type Configurable interface {
 type Product struct {
 	Name         string
 	File         string
-	Api          *api.Product
+	Mmv1         *api.Product
 	Resources    []*Resource
 	TemplateDir  string
 	OverridesDir string
@@ -40,7 +40,7 @@ func NewProduct(yamlPath string, templateDir string, overridesDir string) *Produ
 	return &Product{
 		Name:         strings.ToLower(name),
 		File:         yamlPath,
-		Api:          &api.Product{},
+		Mmv1:         &api.Product{},
 		TemplateDir:  templateDir,
 		OverridesDir: overridesDir,
 	}
@@ -66,7 +66,7 @@ func (p *Product) Unmarshal() error {
 
 	// load main product file
 	yamlValidator := google.YamlValidator{}
-	yamlValidator.Parse(patchedData, p.Api, p.File)
+	yamlValidator.Parse(patchedData, p.Mmv1, p.File)
 
 	return nil
 }
@@ -86,7 +86,7 @@ func (p *Product) ApplyOverrides(rootNode *yaml.Node) {
 type Resource struct {
 	Name          string
 	File          string
-	Api           *api.Resource
+	Mmv1          *api.Resource
 	Parent        *Product
 	TemplateDir   string
 	OverridesDir  string
@@ -100,7 +100,7 @@ func NewResource(yamlPath string, parent *Product, templateDir string, overrides
 	return &Resource{
 		Name:          name,
 		File:          yamlPath,
-		Api:           &api.Resource{},
+		Mmv1:          &api.Resource{},
 		Parent:        parent,
 		TemplateDir:   templateDir,
 		OverridesDir:  overridesDir,
@@ -134,7 +134,7 @@ func (r *Resource) Unmarshal() error {
 
 	// finally load into the actual resource struct and unmarshal
 	yamlValidator := google.YamlValidator{}
-	yamlValidator.Parse(patchedData, r.Api, r.File)
+	yamlValidator.Parse(patchedData, r.Mmv1, r.File)
 
 	// once it has successfully unmarshaled, we can generate more pieces of the struct
 	// generate the documentation

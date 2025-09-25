@@ -17,9 +17,9 @@ DOCUMENTATION = r"""
 ---
 {{ $.Documentation.ToYAML }}"""
 
-{{- if gt (len $.Api.Examples) 0 }}
+{{- if gt (len $.Mmv1.Examples) 0 }}
 EXAMPLES = r"""
-{{ range $.Api.Examples }}
+{{ range $.Mmv1.Examples }}
 {{- .TestHCLText }}
 {{- end }}
 """
