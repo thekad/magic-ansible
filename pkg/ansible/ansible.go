@@ -218,3 +218,12 @@ func (m *Module) SelfLinkTpl() string {
 	tpl := strings.ReplaceAll(strings.ReplaceAll(m.Resource.Mmv1.SelfLink, "{{", "{"), "}}", "}")
 	return fmt.Sprintf("%s%s", m.BaseUrl(), tpl)
 }
+
+func (m *Module) CollectionTpl() string {
+	tpl := strings.ReplaceAll(strings.ReplaceAll(m.Resource.Mmv1.CollectionUrl(), "{{", "{"), "}}", "}")
+	return fmt.Sprintf("%s%s", m.BaseUrl(), tpl)
+}
+
+func (m *Module) ParentName() string {
+	return strings.ToLower(m.Resource.Parent.Name)
+}
