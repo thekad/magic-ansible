@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	mmv1product "github.com/GoogleCloudPlatform/magic-modules/mmv1/api/product"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/rs/zerolog"
@@ -22,6 +23,7 @@ import (
 )
 
 const MMV1_REPO string = "https://github.com/GoogleCloudPlatform/magic-modules"
+const MIN_VERSION string = "beta"
 
 type argList []string
 
@@ -48,6 +50,7 @@ var dontGenerateCode bool
 var dontGenerateTests bool
 var overwrite bool
 var gitURL string
+var minVersion string
 
 func init() {
 	flag.StringVar(&gitURL, "git-url", MMV1_REPO, "git repository to clone")
@@ -62,6 +65,7 @@ func init() {
 	flag.BoolVar(&dontGenerateCode, "no-code", false, "skip code generation")
 	flag.BoolVar(&dontGenerateTests, "no-tests", false, "skip test generation")
 	flag.BoolVar(&overwrite, "overwrite", false, "overwrite existing files")
+	flag.StringVar(&minVersion, "min-version", MIN_VERSION, "minimum version to generate")
 
 	// configure logging
 	logLevelStr := os.Getenv("LOG_LEVEL")
@@ -177,6 +181,9 @@ func doPopulateResourcesByProduct(gitDir string, product *api.Product, names []s
 		rName := strings.TrimSuffix(filepath.Base(rf), filepath.Ext(filepath.Base(rf)))
 		if len(names) == 0 || slices.Contains(names, strings.ToLower(rName)) {
 			r := api.NewResource(rf, product, product.TemplateDir, product.OverridesDir)
+			if r == nil {
+				continue
+			}
 			product.Resources = append(product.Resources, r)
 		}
 	}
@@ -206,6 +213,7 @@ func main() {
 
 	// build list of modules to generate
 	modulesToGenerate := []*ansible.Module{}
+	minVersionObj := &mmv1product.Version{Name: minVersion}
 	for _, p := range productsToGenerate {
 		// populate resources for given products
 		err := doPopulateResourcesByProduct(gitDir, p, resources)
@@ -227,8 +235,14 @@ func main() {
 				log.Fatal().Err(err).Msg("failed to unmarshal resource")
 			}
 
+			if r.Mmv1.ProductMetadata.VersionObjOrClosest(r.Mmv1.MinVersion).CompareTo(minVersionObj) != 0 {
+				log.Warn().Msgf("resource %s.%s minimum version is %v, but %s is required", r.Parent.Name, r.Name, r.MinVersion(), minVersion)
+				continue
+			}
+
 			// generate module struct
 			module := ansible.NewFromResource(r)
+			module.MinVersion = r.MinVersion()
 			modulesToGenerate = append(modulesToGenerate, module)
 		}
 	}

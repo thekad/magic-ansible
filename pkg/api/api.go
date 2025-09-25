@@ -95,11 +95,12 @@ type Resource struct {
 // NewResource is a constructor that returns an initialized Resource type
 func NewResource(yamlPath string, parent *Product, templateDir string, overridesDir string) *Resource {
 	name := strings.TrimSuffix(filepath.Base(yamlPath), ".yaml")
+	r := &mmv1api.Resource{ProductMetadata: parent.Mmv1}
 
 	return &Resource{
 		Name:         name,
 		File:         yamlPath,
-		Mmv1:         &mmv1api.Resource{},
+		Mmv1:         r,
 		Parent:       parent,
 		TemplateDir:  templateDir,
 		OverridesDir: overridesDir,
@@ -144,6 +145,22 @@ func (r *Resource) AnsibleName() string {
 // ApplyOverrides will apply our overrides for the given resource
 func (r *Resource) ApplyOverrides(rootNode *yaml.Node) {
 	overrideYAML(rootNode, r.OverridesDir, r.File)
+}
+
+// MinVersion will return the minimum version supported by the given resource
+func (r *Resource) MinVersion() string {
+	if r.Mmv1.MinVersion == "" {
+		return "ga"
+	}
+	return r.Mmv1.MinVersion
+}
+
+func (r *Resource) Versions() []string {
+	versions := []string{}
+	for _, version := range r.Parent.Mmv1.Versions {
+		versions = append(versions, version.Name)
+	}
+	return versions
 }
 
 // patchExamples will update the config_path for each item in the examples list

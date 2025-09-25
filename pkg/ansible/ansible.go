@@ -17,7 +17,9 @@ import (
 )
 
 type Module struct {
+	Name          string
 	Resource      *api.Resource
+	MinVersion    string
 	Options       map[string]*Option
 	Documentation *Documentation
 	Returns       *ReturnBlock
@@ -27,6 +29,7 @@ type Module struct {
 
 func NewFromResource(resource *api.Resource) *Module {
 	m := &Module{
+		Name:     resource.AnsibleName(),
 		Resource: resource,
 		Options:  NewOptionsFromMmv1(resource.Mmv1),
 		Examples: NewExampleBlockFromMmv1(resource.Mmv1),
@@ -192,7 +195,7 @@ func (m *Module) UrlParamOnlyProperties() []*mmv1api.Type {
 func (m *Module) BaseUrl() string {
 	productVersions := m.Resource.Parent.Mmv1.Versions
 	for _, version := range productVersions {
-		if version.Name == "ga" {
+		if version.Name == m.Resource.MinVersion() {
 			return version.BaseUrl
 		}
 	}
