@@ -83,6 +83,10 @@ func mapMmv1TypeToReturnType(property *mmv1api.Type) (ReturnType, error) {
 		return ReturnTypeComplex, nil
 	case "KeyValueAnnotations":
 		return ReturnTypeDict, nil
+	case "KeyValueLabels":
+		return ReturnTypeDict, nil
+	case "KeyValuePairs":
+		return ReturnTypeDict, nil
 	case "Array":
 		return ReturnTypeList, nil
 	case "Enum":
@@ -131,7 +135,7 @@ func NewReturnBlockFromMmv1(resource *mmv1api.Resource) *ReturnBlock {
 		}
 
 		returnAttr := &ReturnAttribute{
-			Description: parseDescription(property.GetDescription()),
+			Description: parsePropertyDescription(property),
 			Returned:    determineReturnedCondition(property),
 			Type:        returnType,
 		}
@@ -182,7 +186,7 @@ func createReturnContains(properties []*mmv1api.Type) *ReturnBlock {
 		}
 
 		containsAttr := &ReturnAttribute{
-			Description: parseDescription(subProp.GetDescription()),
+			Description: parsePropertyDescription(subProp),
 			Returned:    determineReturnedCondition(subProp),
 			Type:        subReturnType,
 		}

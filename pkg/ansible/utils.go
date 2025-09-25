@@ -61,6 +61,10 @@ func mapMmv1ToAnsible(property *mmv1api.Type) (Type, error) {
 		return TypeDict, nil
 	case "KeyValueAnnotations":
 		return TypeDict, nil
+	case "KeyValueLabels":
+		return TypeDict, nil
+	case "KeyValuePairs":
+		return TypeDict, nil
 	case "Array":
 		return TypeList, nil
 	case "Enum":
@@ -72,9 +76,10 @@ func mapMmv1ToAnsible(property *mmv1api.Type) (Type, error) {
 	}
 }
 
-// parseDescription converts API property description to Ansible format i.e. multi-line string to list of strings
-func parseDescription(description string) []interface{} {
-	if description == "" {
+// parsePropertyDescription converts API property description to Ansible format i.e. multi-line string to list of strings
+func parsePropertyDescription(property *mmv1api.Type) []string {
+	description := property.Description
+	if property.Description == "" {
 		description = "No description available."
 	}
 
@@ -86,7 +91,7 @@ func parseDescription(description string) []interface{} {
 
 	// Split description into lines and clean them up
 	lines := strings.Split(description, "\n")
-	var cleanLines []interface{}
+	var cleanLines []string
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -96,7 +101,18 @@ func parseDescription(description string) []interface{} {
 	}
 
 	if len(cleanLines) == 0 {
-		cleanLines = []interface{}{"No description available."}
+		cleanLines = []string{"No description available."}
+	}
+
+	if property.Type == "ResourceRef" {
+		sourceRefDesc := []string{
+			fmt.Sprintf("This field is a reference to a %s resource in GCP.", property.Resource),
+			"It can be specified in two ways.",
+			fmt.Sprintf("First, you can place a dictionary with key '%s' matching your resource.", string(property.Imports)),
+			fmt.Sprintf("Alternatively, you can add `register: name-of-resource` to a %s creation task", property.Resource),
+			"and then set this field to `{{ name-of-resource }}`.",
+		}
+		cleanLines = append(cleanLines, sourceRefDesc...)
 	}
 
 	if immutable {

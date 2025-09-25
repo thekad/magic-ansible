@@ -36,7 +36,7 @@ func NewFromResource(resource *api.Resource) *Module {
 type Option struct {
 	// Description is required - explanation of what this option does
 	// Can be a string or list of strings (each string is one paragraph)
-	Description []interface{} `yaml:"description" json:"description"`
+	Description []string `yaml:"description" json:"description"`
 
 	// Type is optional - data type of the option
 	// Uses AnsibleType enum for type safety
@@ -86,7 +86,7 @@ func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
 
 	// Always add the standard 'state' option for GCP resources
 	options["state"] = &Option{
-		Description: []interface{}{
+		Description: []string{
 			"Whether the resource should exist in GCP.",
 		},
 		Type:     TypeStr,
@@ -113,7 +113,7 @@ func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
 		}
 
 		option := &Option{
-			Description: parseDescription(property.GetDescription()),
+			Description: parsePropertyDescription(property),
 			Type:        ansibleType,
 			Required:    property.Required,
 			Default:     property.DefaultValue,
@@ -170,7 +170,7 @@ func createSuboptions(properties []*mmv1api.Type) map[string]*Option {
 		}
 
 		suboption := &Option{
-			Description: parseDescription(subProp.GetDescription()),
+			Description: parsePropertyDescription(subProp),
 			Type:        subAnsibleType,
 			Required:    subProp.Required,
 			Default:     subProp.DefaultValue,
