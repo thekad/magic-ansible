@@ -80,7 +80,7 @@ func mapMmv1TypeToReturnType(property *mmv1api.Type) (ReturnType, error) {
 	case "Boolean":
 		return ReturnTypeBool, nil
 	case "NestedObject":
-		return ReturnTypeComplex, nil
+		return ReturnTypeDict, nil
 	case "KeyValueAnnotations":
 		return ReturnTypeDict, nil
 	case "KeyValueLabels":
@@ -124,8 +124,25 @@ func NewReturnBlockFromMmv1(resource *mmv1api.Resource) *ReturnBlock {
 	}
 
 	// Process properties from the API Resource
-	outputProperties := resource.GettableProperties()
-	for _, property := range outputProperties {
+	convertedReturns := convertPropertiesToReturns(resource.GettableProperties())
+
+	// Merge the converted returns with the standard returns
+	for name, returnAttr := range convertedReturns {
+		returns.Returns[name] = returnAttr
+	}
+
+	return returns
+}
+
+// convertPropertiesToReturns converts MMv1 properties to Ansible return attributes
+func convertPropertiesToReturns(properties []*mmv1api.Type) map[string]*ReturnAttribute {
+	if properties == nil {
+		return nil
+	}
+
+	returns := make(map[string]*ReturnAttribute)
+
+	for _, property := range properties {
 		returnName := property.Name
 
 		// Create the return attribute
@@ -151,69 +168,19 @@ func NewReturnBlockFromMmv1(resource *mmv1api.Resource) *ReturnBlock {
 
 			// If the list contains nested objects, create contains for the element type
 			if property.ItemType.Type == "NestedObject" && property.ItemType.Properties != nil {
-				returnAttr.Contains = createReturnContains(property.ItemType.Properties).Returns
+				returnAttr.Contains = convertPropertiesToReturns(property.ItemType.Properties)
 			}
 		}
 
 		// Handle nested dictionary objects (direct contains)
 		if (returnAttr.Type == ReturnTypeDict || returnAttr.Type == ReturnTypeComplex) && property.Properties != nil {
-			returnAttr.Contains = createReturnContains(property.Properties).Returns
+			returnAttr.Contains = convertPropertiesToReturns(property.Properties)
 		}
 
-		returns.Returns[returnName] = returnAttr
+		returns[returnName] = returnAttr
 	}
 
 	return returns
-}
-
-// createReturnContains recursively creates contains from API properties for nested return values
-func createReturnContains(properties []*mmv1api.Type) *ReturnBlock {
-	if properties == nil {
-		return &ReturnBlock{}
-	}
-
-	contains := &ReturnBlock{
-		Returns: make(map[string]*ReturnAttribute),
-	}
-
-	for _, subProp := range properties {
-		containsName := subProp.Name
-
-		// Create the nested return attribute
-		subReturnType, err := mapMmv1TypeToReturnType(subProp)
-		if err != nil {
-			log.Warn().Err(err).Msgf("error mapping return type for nested property %s", subProp.Name)
-		}
-
-		containsAttr := &ReturnAttribute{
-			Description: parsePropertyDescription(subProp),
-			Returned:    determineReturnedCondition(subProp),
-			Type:        subReturnType,
-		}
-
-		// Handle list element types for nested properties
-		if subProp.ItemType != nil {
-			subElementType, err := mapMmv1TypeToReturnType(subProp.ItemType)
-			if err != nil {
-				log.Warn().Err(err).Msgf("error mapping return element type for nested property %s", subProp.Name)
-			}
-			containsAttr.Elements = subElementType
-
-			// If the list contains nested objects, recursively create contains
-			if subProp.ItemType.Type == "NestedObject" && subProp.ItemType.Properties != nil {
-				containsAttr.Contains = createReturnContains(subProp.ItemType.Properties).Returns
-			}
-		}
-
-		// Handle nested dictionary objects (recursive contains)
-		if containsAttr.Type == ReturnTypeDict && subProp.Properties != nil {
-			containsAttr.Contains = createReturnContains(subProp.Properties).Returns
-		}
-
-		contains.Returns[containsName] = containsAttr
-	}
-
-	return contains
 }
 
 // determineReturnedCondition determines when a return value is returned based on property characteristics

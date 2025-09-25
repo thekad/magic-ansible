@@ -89,16 +89,33 @@ func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
 		Description: []string{
 			"Whether the resource should exist in GCP.",
 		},
-		Type:     TypeStr,
-		Default:  "present",
-		Required: true,
-		Choices:  []string{"present", "absent"},
+		Type:    TypeStr,
+		Default: "present",
+		Choices: []string{"present", "absent"},
 	}
 
 	// Process all user properties from the API Resource
-	allUserProperties := resource.AllUserProperties()
-	for _, property := range allUserProperties {
-		// Skip output-only
+	//convertedOptions := convertPropertiesToOptions(resource.AllUserProperties())
+	convertedOptions := convertPropertiesToOptions(resource.SettableProperties())
+
+	// Merge the converted options with the state option
+	for name, option := range convertedOptions {
+		options[name] = option
+	}
+
+	return options
+}
+
+// convertPropertiesToOptions converts MMv1 properties to Ansible options
+func convertPropertiesToOptions(properties []*mmv1api.Type) map[string]*Option {
+	if properties == nil {
+		return nil
+	}
+
+	options := make(map[string]*Option)
+
+	for _, property := range properties {
+		// Skip output-only properties
 		if property.Output {
 			continue
 		}
@@ -121,7 +138,7 @@ func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
 		}
 
 		// Handle list element types
-		if option.Type == TypeList {
+		if option.Type == TypeList && property.ItemType != nil {
 			log.Debug().Msgf("%v is a list", property.Name)
 			elementType, err := mapMmv1ToAnsible(property.ItemType)
 			if err != nil {
@@ -131,75 +148,17 @@ func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
 
 			// If the list contains nested objects, create suboptions for the element type
 			if property.ItemType.Type == "NestedObject" && property.ItemType.Properties != nil {
-				option.Suboptions = createSuboptions(property.ItemType.Properties)
+				option.Suboptions = convertPropertiesToOptions(property.ItemType.Properties)
 			}
 		}
 
 		// Handle nested dictionary objects (direct suboptions)
 		if option.Type == TypeDict && property.Properties != nil {
-			option.Suboptions = createSuboptions(property.Properties)
+			option.Suboptions = convertPropertiesToOptions(property.Properties)
 		}
 
 		options[optionName] = option
 	}
 
 	return options
-}
-
-// createSuboptions recursively creates suboptions from API properties
-func createSuboptions(properties []*mmv1api.Type) map[string]*Option {
-	if properties == nil {
-		return nil
-	}
-
-	suboptions := make(map[string]*Option)
-
-	for _, subProp := range properties {
-		// Skip output-only properties
-		if subProp.Output {
-			continue
-		}
-
-		// Convert property name to Ansible-style underscore format
-		subOptionName := google.Underscore(subProp.Name)
-
-		// Create the suboption
-		subAnsibleType, err := mapMmv1ToAnsible(subProp)
-		if err != nil {
-			log.Warn().Err(err).Msgf("error mapping type for suboption %s", subProp.Name)
-		}
-
-		suboption := &Option{
-			Description: parsePropertyDescription(subProp),
-			Type:        subAnsibleType,
-			Required:    subProp.Required,
-			Default:     subProp.DefaultValue,
-		}
-
-		// Handle list element types for suboptions
-		if subProp.ItemType != nil {
-			subElementType, err := mapMmv1ToAnsible(subProp.ItemType)
-			if err != nil {
-				log.Warn().Err(err).Msgf("error mapping element type for suboption %s", subProp.Name)
-			}
-			suboption.Elements = subElementType
-
-			// If the list contains nested objects, recursively create suboptions
-			if subProp.ItemType.Type == "NestedObject" && subProp.ItemType.Properties != nil {
-				suboption.Suboptions = createSuboptions(subProp.ItemType.Properties)
-			}
-		}
-
-		// Handle nested dictionary objects (recursive suboptions)
-		if suboption.Type == TypeDict && subProp.Properties != nil {
-			suboption.Suboptions = createSuboptions(subProp.Properties)
-		}
-
-		// Note: Choices and default values for suboptions would be handled here
-		// if available in the API structure
-
-		suboptions[subOptionName] = suboption
-	}
-
-	return suboptions
 }
