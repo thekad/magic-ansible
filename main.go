@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/thekad/magic-ansible/pkg/ansible"
+	"github.com/thekad/magic-ansible/pkg/api"
 	tpl "github.com/thekad/magic-ansible/pkg/template"
 )
 
@@ -147,8 +148,8 @@ func gitClone(path string, ref string, pull bool) error {
 }
 
 // findProducts finds the matching product.yaml files in the given git directory
-func findProducts(gitDir string, names []string, templateDir string, overridesDir string) ([]*ansible.Product, error) {
-	products := []*ansible.Product{}
+func findProducts(gitDir string, names []string, templateDir string, overridesDir string) ([]*api.Product, error) {
+	products := []*api.Product{}
 
 	allFiles, err := filepath.Glob(fmt.Sprintf("%s/mmv1/products/**/product.yaml", gitDir))
 	if err != nil {
@@ -158,7 +159,7 @@ func findProducts(gitDir string, names []string, templateDir string, overridesDi
 	for _, pf := range allFiles {
 		pName := filepath.Base(filepath.Dir(pf))
 		if len(names) == 0 || slices.Contains(names, pName) {
-			p := ansible.NewProduct(pf, templateDir, overridesDir)
+			p := api.NewProduct(pf, templateDir, overridesDir)
 			products = append(products, p)
 		}
 	}
@@ -167,7 +168,7 @@ func findProducts(gitDir string, names []string, templateDir string, overridesDi
 }
 
 // populateResourcesByProduct populates the resources for the given product
-func populateResourcesByProduct(gitDir string, product *ansible.Product, names []string) error {
+func populateResourcesByProduct(gitDir string, product *api.Product, names []string) error {
 	allFiles, _ := filepath.Glob(fmt.Sprintf("%s/mmv1/products/%s/*.yaml", gitDir, product.Name))
 	for _, rf := range allFiles {
 		if filepath.Base(rf) == "product.yaml" {
@@ -175,7 +176,7 @@ func populateResourcesByProduct(gitDir string, product *ansible.Product, names [
 		}
 		rName := strings.TrimSuffix(filepath.Base(rf), filepath.Ext(filepath.Base(rf)))
 		if len(names) == 0 || slices.Contains(names, strings.ToLower(rName)) {
-			r := ansible.NewResource(rf, product, product.TemplateDir, product.OverridesDir)
+			r := api.NewResource(rf, product, product.TemplateDir, product.OverridesDir)
 			product.Resources = append(product.Resources, r)
 		}
 	}
@@ -203,7 +204,8 @@ func main() {
 	templateData := tpl.NewTemplateData(templateDir, output, overwrite)
 	log.Debug().Msgf("template data: %v", templateData)
 
-	// do the work
+	// build list of modules to generate
+	modulesToGenerate := []*ansible.Module{}
 	for _, p := range productsToGenerate {
 		// populate resources for given products
 		err := populateResourcesByProduct(gitDir, p, resources)
@@ -225,20 +227,28 @@ func main() {
 				log.Fatal().Err(err).Msg("failed to unmarshal resource")
 			}
 
-			// generate code for resources
-			if !dontGenerateCode {
-				err := templateData.GenerateCode(r)
-				if err != nil {
-					log.Fatal().Err(err).Msg("failed to generate code for resource")
-				}
-			}
+			// generate module struct
+			module := ansible.NewFromResource(r)
+			modulesToGenerate = append(modulesToGenerate, module)
+		}
+	}
+	// generate modules
 
-			// generate tests for resources
-			if !dontGenerateTests {
-				err := templateData.GenerateTests(r)
-				if err != nil {
-					log.Fatal().Err(err).Msg("failed to generate tests for resource")
-				}
+	for _, m := range modulesToGenerate {
+		// generate code for resources
+		if !dontGenerateCode {
+			log.Info().Msgf("generating code for ansible module: %s", m)
+			err := templateData.GenerateCode(m)
+			if err != nil {
+				log.Fatal().Err(err).Msg("failed to generate code for ansible module")
+			}
+		}
+		// generate tests for resources
+		if !dontGenerateTests {
+			log.Info().Msgf("generating tests for ansible module: %s", m)
+			err := templateData.GenerateTests(m)
+			if err != nil {
+				log.Fatal().Err(err).Msg("failed to generate tests for ansible module")
 			}
 		}
 	}

@@ -15,15 +15,31 @@ ANSIBLE_METADATA = {
 
 DOCUMENTATION = r"""
 ---
-{{ $.Documentation.ToYAML }}"""
+{{ $.Documentation }}"""
 
-{{- if gt (len $.Mmv1.Examples) 0 }}
 EXAMPLES = r"""
-{{ range $.Mmv1.Examples }}
-{{- .TestHCLText }}
-{{- end }}
-"""
-{{- end }}
+{{ $.Examples }}"""
 
 RETURN = r"""
-{{ returnsToYAML $.Returns }}"""
+{{ $.Returns }}"""
+
+################################################################################
+# Imports
+################################################################################
+
+from ansible_collections.google.cloud.plugins.module_utils.gcp_utils import (
+    navigate_hash,
+    GcpSession,
+    GcpModule,
+    GcpRequest,
+    remove_nones_from_dict,
+)
+import json
+
+################################################################################
+# Main
+################################################################################
+
+
+def main():
+    """Main function"""

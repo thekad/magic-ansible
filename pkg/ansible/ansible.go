@@ -5,214 +5,297 @@ package ansible
 
 import (
 	"fmt"
-	"os"
-	"path"
-	"path/filepath"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
+	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
 	"github.com/rs/zerolog/log"
-	"gopkg.in/yaml.v3"
+	"github.com/thekad/magic-ansible/pkg/api"
 )
 
-// Configurable is generic interface for both Product and Resource
-type Configurable interface {
-	Unmarshal() error
-	ToLower() string
-	AnsibleName() string
-}
-
-// Product is a representation of a directory in the mmv1/products directory
-// from the magic-modules clone e.g. mmv1/products/<product>/product.yaml
-type Product struct {
-	Name         string
-	File         string
-	Mmv1         *api.Product
-	Resources    []*Resource
-	TemplateDir  string
-	OverridesDir string
-}
-
-// NewProduct is a constructor that returns an initialized Product type
-func NewProduct(yamlPath string, templateDir string, overridesDir string) *Product {
-	name := filepath.Base(filepath.Dir(yamlPath))
-	return &Product{
-		Name:         strings.ToLower(name),
-		File:         yamlPath,
-		Mmv1:         &api.Product{},
-		TemplateDir:  templateDir,
-		OverridesDir: overridesDir,
-	}
-}
-
-func (p *Product) Unmarshal() error {
-	yamlData, err := os.ReadFile(p.File)
-	if err != nil {
-		return fmt.Errorf("cannot open product file: %v", p.File)
-	}
-
-	rootNode := yaml.Node{}
-	if err := yaml.Unmarshal(yamlData, &rootNode); err != nil {
-		return fmt.Errorf("cannot unmarshal product file: %v", p.File)
-	}
-	p.ApplyOverrides(&rootNode)
-
-	// marshal the patched data back into a string
-	patchedData, err := yaml.Marshal(&rootNode)
-	if err != nil {
-		return fmt.Errorf("error marshaling patched data: %v", err)
-	}
-
-	// load main product file
-	yamlValidator := google.YamlValidator{}
-	yamlValidator.Parse(patchedData, p.Mmv1, p.File)
-
-	return nil
-}
-
-// AnsibleName will return a properly formatted Ansible name for the given product
-func (p *Product) AnsibleName() string {
-	return fmt.Sprintf("gcp_%s", google.Underscore(p.Name))
-}
-
-// ApplyOverrides will apply our overrides for the given product
-func (p *Product) ApplyOverrides(rootNode *yaml.Node) {
-	overrideYAML(rootNode, p.OverridesDir, p.File)
-}
-
-// Resource is a representation of a file found in the products directory
-// from magic-modules clone e.g. mmv1/products/<product>/<resource>.yaml
-type Resource struct {
-	Name          string
-	File          string
-	Mmv1          *api.Resource
-	Parent        *Product
-	TemplateDir   string
-	OverridesDir  string
+type Module struct {
+	Resource      *api.Resource
+	Options       map[string]*Option
 	Documentation *Documentation
-	Returns       map[string]*ReturnAttribute
+	Returns       *ReturnBlock
+	Examples      *ExampleBlock
 }
 
-// NewResource is a constructor that returns an initialized Resource type
-func NewResource(yamlPath string, parent *Product, templateDir string, overridesDir string) *Resource {
-	name := strings.TrimSuffix(filepath.Base(yamlPath), ".yaml")
-
-	return &Resource{
-		Name:          name,
-		File:          yamlPath,
-		Mmv1:          &api.Resource{},
-		Parent:        parent,
-		TemplateDir:   templateDir,
-		OverridesDir:  overridesDir,
-		Documentation: &Documentation{},
+func NewFromResource(resource *api.Resource) *Module {
+	m := &Module{
+		Resource: resource,
+		Options:  NewOptionsFromMmv1(resource.Mmv1),
+		Returns:  NewReturnBlockFromMmv1(resource.Mmv1),
+		Examples: NewExampleBlockFromMmv1(resource.Mmv1),
 	}
+	m.Documentation = BuildDocumentationWithOptions(resource, m.Options)
+	return m
 }
 
-func (r *Resource) Unmarshal() error {
-	yamlData, err := os.ReadFile(r.File)
-	if err != nil {
-		return fmt.Errorf("cannot open resource file: %v", r.File)
+func (m *Module) String() string {
+	return m.Resource.AnsibleName()
+}
+
+// Type represents the data types supported by Ansible modules
+type Type string
+
+// Ansible module data types as defined in the official documentation
+const (
+	TypeStr     Type = "str"
+	TypeInt     Type = "int"
+	TypeBool    Type = "bool"
+	TypeList    Type = "list"
+	TypeDict    Type = "dict"
+	TypePath    Type = "path"
+	TypeRaw     Type = "raw"
+	TypeJsonarg Type = "jsonarg"
+	TypeBytes   Type = "bytes"
+	TypeBits    Type = "bits"
+	TypeFloat   Type = "float"
+)
+
+// String returns the string representation of the AnsibleType
+func (t Type) String() string {
+	return string(t)
+}
+
+// Option represents a single option in the Ansible module documentation
+// Based on: https://docs.ansible.com/ansible/latest/dev_guide/developing_modules_documenting.html#documentation-block
+type Option struct {
+	// Description is required - explanation of what this option does
+	// Can be a string or list of strings (each string is one paragraph)
+	Description []interface{} `yaml:"description" json:"description"`
+
+	// Type is optional - data type of the option
+	// Uses AnsibleType enum for type safety
+	Type Type `yaml:"type,omitempty" json:"type,omitempty"`
+
+	// Default is optional - default value for the option
+	Default interface{} `yaml:"default,omitempty" json:"default,omitempty"`
+
+	// Required is optional - whether this option is required
+	// Defaults to false if not specified
+	Required bool `yaml:"required,omitempty" json:"required,omitempty"`
+
+	// Choices is optional - list of valid values for this option
+	Choices []string `yaml:"choices,omitempty" json:"choices,omitempty"`
+
+	// Elements is optional - if type='list', specifies the data type of list elements
+	Elements Type `yaml:"elements,omitempty" json:"elements,omitempty"`
+
+	// Suboptions is optional - for complex types (dict), defines nested options
+	Suboptions map[string]*Option `yaml:"suboptions,omitempty" json:"suboptions,omitempty"`
+
+	// MutuallyExclusive is optional - list of options that cannot be used together
+	MutuallyExclusive [][]string `yaml:"mutually_exclusive,omitempty" json:"mutually_exclusive,omitempty"`
+
+	// RequiredTogether is optional - list of options that must be used together
+	RequiredTogether [][]string `yaml:"required_together,omitempty" json:"required_together,omitempty"`
+
+	// RequiredOneOf is optional - list where at least one option must be specified
+	RequiredOneOf [][]string `yaml:"required_one_of,omitempty" json:"required_one_of,omitempty"`
+
+	// RequiredIf is optional - conditional requirements
+	RequiredIf [][]interface{} `yaml:"required_if,omitempty" json:"required_if,omitempty"`
+
+	// RequiredBy is optional - options that are required when this option is specified
+	RequiredBy map[string][]string `yaml:"required_by,omitempty" json:"required_by,omitempty"`
+}
+
+// NewOptionsFromMmv1 creates a map of Ansible options from a magic-modules API Resource
+// This constructor extracts user properties from the API Resource and converts them
+// to Ansible module options following the documentation format
+func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
+	if resource == nil {
+		return nil
 	}
 
-	// TODO: Patch the generic YAML struct so all examples point to *our* templateDir
-	// then marshal it back again so it can be unmarshaled *yet again* with the
-	// right template paths. This is because of the custom UnmarshalYAML defined
-	// upstream for product/resource/example which renders the templates when
-	// the YAML is unmarshaled into a struct. Sigh - @thekad
-	rootNode := yaml.Node{}
-	if err := yaml.Unmarshal(yamlData, &rootNode); err != nil {
-		return fmt.Errorf("cannot unmarshal file: %v", r.File)
-	}
-	r.ApplyOverrides(&rootNode)
-	r.patchExamples(&rootNode)
+	options := make(map[string]*Option)
 
-	// marshal the patched data back into a string
-	patchedData, err := yaml.Marshal(&rootNode)
-	if err != nil {
-		return fmt.Errorf("error marshaling patched data: %v", err)
+	// Always add the standard 'state' option for GCP resources
+	options["state"] = &Option{
+		Description: []interface{}{
+			"Whether the resource should exist in GCP.",
+		},
+		Type:     TypeStr,
+		Default:  "present",
+		Required: true,
+		Choices:  []string{"present", "absent"},
 	}
 
-	// finally load into the actual resource struct and unmarshal
-	yamlValidator := google.YamlValidator{}
-	yamlValidator.Parse(patchedData, r.Mmv1, r.File)
+	// Process all user properties from the API Resource
+	allUserProperties := resource.AllUserProperties()
+	for _, property := range allUserProperties {
+		// Skip output-only
+		if property.Output {
+			continue
+		}
 
-	// once it has successfully unmarshaled, we can generate more pieces of the struct
-	// generate the documentation
-	r.Documentation = NewDocumentationFromMmv1(r)
+		// Convert property name to Ansible-style underscore format
+		optionName := google.Underscore(property.Name)
 
-	// generate the return block
-	r.Returns = BuildReturnBlockFromMmv1(r.Mmv1)
+		// Create the option
+		ansibleType, err := mapMmv1ToAnsible(property)
+		if err != nil {
+			log.Warn().Err(err).Msgf("error mapping type for property %s", property.Name)
+		}
 
-	return nil
-}
+		option := &Option{
+			Description: parseDescription(property.GetDescription()),
+			Type:        ansibleType,
+			Required:    property.Required,
+			Default:     property.DefaultValue,
+			Choices:     property.EnumValues,
+		}
 
-func (r *Resource) ToLower() string {
-	return strings.ToLower(r.Name)
-}
-
-func (r *Resource) AnsibleName() string {
-	return fmt.Sprintf("%s_%s", r.Parent.AnsibleName(), google.Underscore(r.Name))
-}
-
-// ApplyOverrides will apply our overrides for the given resource
-func (r *Resource) ApplyOverrides(rootNode *yaml.Node) {
-	overrideYAML(rootNode, r.OverridesDir, r.File)
-}
-
-// patchExamples will update the config_path for each item in the examples list
-func (r *Resource) patchExamples(rootNode *yaml.Node) {
-	// patch examples' config_path
-	examplesNode := findNodeByKey(rootNode, "examples")
-	if examplesNode == nil || examplesNode.Kind != yaml.SequenceNode {
-		// Return immediately if the node is not found or is not a list
-		return
-	}
-	log.Debug().Msgf("patching examples for resource: %s.%s", r.Parent.Name, r.Name)
-
-	pathPrefix := path.Join(r.TemplateDir, "examples")
-	keyToUpdate := "config_path"
-
-	// Iterate over each item in the examples list.
-	for _, exampleMapNode := range examplesNode.Content {
-		var name string
-		var valueToSet string
-
-		if exampleMapNode.Kind == yaml.MappingNode {
-			found := false
-
-			// Find the example name, gotta loop twice because we first have to find the name :(
-			for i := 0; i < len(exampleMapNode.Content); i += 2 {
-				keyNode := exampleMapNode.Content[i]
-				valueNode := exampleMapNode.Content[i+1]
-
-				if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "name" {
-					name = valueNode.Value
-					break
-				}
+		// Handle list element types
+		if option.Type == TypeList {
+			log.Debug().Msgf("%v is a list", property.Name)
+			elementType, err := mapMmv1ToAnsible(property.ItemType)
+			if err != nil {
+				log.Warn().Err(err).Msgf("error mapping element type for property %s", property.Name)
 			}
+			option.Elements = elementType
 
-			// load the same template as the example name
-			valueToSet = path.Join(pathPrefix, fmt.Sprintf("%s.tmpl", name))
-
-			// Now find the key to update
-			for i := 0; i < len(exampleMapNode.Content); i += 2 {
-				keyNode := exampleMapNode.Content[i]
-				valueNode := exampleMapNode.Content[i+1]
-
-				if keyNode.Kind == yaml.ScalarNode && keyNode.Value == keyToUpdate {
-					valueNode.Value = valueToSet
-					found = true
-					break
-				}
-			}
-
-			// If the key wasn't found, append it to the map.
-			if !found {
-				keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: keyToUpdate}
-				valueNode := &yaml.Node{Kind: yaml.ScalarNode, Value: valueToSet}
-				exampleMapNode.Content = append(exampleMapNode.Content, keyNode, valueNode)
+			// If the list contains nested objects, create suboptions for the element type
+			if property.ItemType.Type == "NestedObject" && property.ItemType.Properties != nil {
+				option.Suboptions = createSuboptions(property.ItemType.Properties)
 			}
 		}
+
+		// Handle nested dictionary objects (direct suboptions)
+		if option.Type == TypeDict && property.Properties != nil {
+			option.Suboptions = createSuboptions(property.Properties)
+		}
+
+		options[optionName] = option
 	}
+
+	return options
+}
+
+// createSuboptions recursively creates suboptions from API properties
+func createSuboptions(properties []*mmv1api.Type) map[string]*Option {
+	if properties == nil {
+		return nil
+	}
+
+	suboptions := make(map[string]*Option)
+
+	for _, subProp := range properties {
+		// Skip output-only properties
+		if subProp.Output {
+			continue
+		}
+
+		// Convert property name to Ansible-style underscore format
+		subOptionName := google.Underscore(subProp.Name)
+
+		// Create the suboption
+		subAnsibleType, err := mapMmv1ToAnsible(subProp)
+		if err != nil {
+			log.Warn().Err(err).Msgf("error mapping type for suboption %s", subProp.Name)
+		}
+
+		suboption := &Option{
+			Description: parseDescription(subProp.GetDescription()),
+			Type:        subAnsibleType,
+			Required:    subProp.Required,
+			Default:     subProp.DefaultValue,
+		}
+
+		// Handle list element types for suboptions
+		if subProp.ItemType != nil {
+			subElementType, err := mapMmv1ToAnsible(subProp.ItemType)
+			if err != nil {
+				log.Warn().Err(err).Msgf("error mapping element type for suboption %s", subProp.Name)
+			}
+			suboption.Elements = subElementType
+
+			// If the list contains nested objects, recursively create suboptions
+			if subProp.ItemType.Type == "NestedObject" && subProp.ItemType.Properties != nil {
+				suboption.Suboptions = createSuboptions(subProp.ItemType.Properties)
+			}
+		}
+
+		// Handle nested dictionary objects (recursive suboptions)
+		if suboption.Type == TypeDict && subProp.Properties != nil {
+			suboption.Suboptions = createSuboptions(subProp.Properties)
+		}
+
+		// Note: Choices and default values for suboptions would be handled here
+		// if available in the API structure
+
+		suboptions[subOptionName] = suboption
+	}
+
+	return suboptions
+}
+
+// mapMmv1ToAnsible maps magic-modules API types to Ansible module types
+// Returns AnsibleType enum and error for better error handling
+func mapMmv1ToAnsible(property *mmv1api.Type) (Type, error) {
+	if property == nil {
+		return "", fmt.Errorf("property is nil")
+	}
+
+	if property.Type == "" {
+		return TypeStr, fmt.Errorf("property type is empty, defaulting to string")
+	}
+
+	switch property.Type {
+	case "String":
+		return TypeStr, nil
+	case "Integer":
+		return TypeInt, nil
+	case "Boolean":
+		return TypeBool, nil
+	case "NestedObject":
+		return TypeDict, nil
+	case "KeyValueAnnotations":
+		return TypeDict, nil
+	case "Array":
+		return TypeList, nil
+	case "Enum":
+		return TypeStr, nil
+	case "ResourceRef":
+		return TypeDict, nil
+	default:
+		return TypeStr, fmt.Errorf("unknown API type '%s' defaulting to string", property.Type)
+	}
+}
+
+// parseDescription converts API property description to Ansible format
+func parseDescription(description string) []interface{} {
+	if description == "" {
+		description = "No description available."
+	}
+
+	// cleanup description from magic-modules
+	description = strings.TrimPrefix(description, "Required. ") // there's a specific "required" field
+	description = strings.TrimPrefix(description, "Optional. ") // the absence of "required" field means optional
+	immutable := strings.HasPrefix(description, "Immutable.")
+	description = strings.TrimPrefix(description, "Immutable. ") // a note is added to the description if the property is immutable
+
+	// Split description into lines and clean them up
+	lines := strings.Split(description, ". ")
+	var cleanLines []interface{}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		trimmed = fmt.Sprintf("%s.", strings.TrimSuffix(trimmed, "."))
+		if trimmed != "" {
+			cleanLines = append(cleanLines, trimmed)
+		}
+	}
+
+	if len(cleanLines) == 0 {
+		cleanLines = []interface{}{"No description available."}
+	}
+
+	if immutable {
+		cleanLines = append(cleanLines, "This property is immutable, to change it, you must delete and recreate the resource.")
+	}
+
+	return cleanLines
 }

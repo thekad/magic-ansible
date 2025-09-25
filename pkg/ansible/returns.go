@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
+	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
@@ -55,9 +55,21 @@ type ReturnAttribute struct {
 	Contains map[string]*ReturnAttribute `yaml:"contains,omitempty" json:"contains,omitempty"`
 }
 
+type ReturnBlock struct {
+	Returns map[string]*ReturnAttribute `yaml:"returns" json:"returns"`
+}
+
+func (rb *ReturnBlock) String() string {
+	y, err := yaml.Marshal(rb.Returns)
+	if err != nil {
+		return ""
+	}
+	return string(y)
+}
+
 // mapMmv1TypeToReturnType maps magic-modules API types to Ansible module return types
 // Returns ReturnType enum and error for better error handling
-func mapMmv1TypeToReturnType(property *api.Type) (ReturnType, error) {
+func mapMmv1TypeToReturnType(property *mmv1api.Type) (ReturnType, error) {
 	if property == nil {
 		return "", fmt.Errorf("property is nil")
 	}
@@ -88,24 +100,26 @@ func mapMmv1TypeToReturnType(property *api.Type) (ReturnType, error) {
 	}
 }
 
-// BuildReturnBlockFromMmv1 creates a map of Ansible return attributes from a magic-modules API Resource
+// NewReturnBlockFromMmv1 creates a map of Ansible return attributes from a magic-modules API Resource
 // This function extracts properties from the API Resource and converts them to Ansible module return format
 // following the specification at: https://docs.ansible.com/ansible/latest/dev_guide/developing_modules_documenting.html#return-block
-func BuildReturnBlockFromMmv1(resource *api.Resource) map[string]*ReturnAttribute {
+func NewReturnBlockFromMmv1(resource *mmv1api.Resource) *ReturnBlock {
 	if resource == nil {
-		return nil
+		return &ReturnBlock{}
 	}
 
-	returns := make(map[string]*ReturnAttribute)
+	returns := &ReturnBlock{
+		Returns: make(map[string]*ReturnAttribute),
+	}
 
 	// Add standard return values that all GCP modules should have
-	returns["changed"] = &ReturnAttribute{
+	returns.Returns["changed"] = &ReturnAttribute{
 		Description: "Whether the resource was changed.",
 		Returned:    "always",
 		Type:        ReturnTypeBool,
 	}
 
-	returns["state"] = &ReturnAttribute{
+	returns.Returns["state"] = &ReturnAttribute{
 		Description: "The current state of the resource.",
 		Returned:    "always",
 		Type:        ReturnTypeStr,
@@ -139,28 +153,30 @@ func BuildReturnBlockFromMmv1(resource *api.Resource) map[string]*ReturnAttribut
 
 			// If the list contains nested objects, create contains for the element type
 			if property.ItemType.Type == "NestedObject" && property.ItemType.Properties != nil {
-				returnAttr.Contains = createReturnContains(property.ItemType.Properties)
+				returnAttr.Contains = createReturnContains(property.ItemType.Properties).Returns
 			}
 		}
 
 		// Handle nested dictionary objects (direct contains)
 		if (returnAttr.Type == ReturnTypeDict || returnAttr.Type == ReturnTypeComplex) && property.Properties != nil {
-			returnAttr.Contains = createReturnContains(property.Properties)
+			returnAttr.Contains = createReturnContains(property.Properties).Returns
 		}
 
-		returns[returnName] = returnAttr
+		returns.Returns[returnName] = returnAttr
 	}
 
 	return returns
 }
 
 // createReturnContains recursively creates contains from API properties for nested return values
-func createReturnContains(properties []*api.Type) map[string]*ReturnAttribute {
+func createReturnContains(properties []*mmv1api.Type) *ReturnBlock {
 	if properties == nil {
-		return nil
+		return &ReturnBlock{}
 	}
 
-	contains := make(map[string]*ReturnAttribute)
+	contains := &ReturnBlock{
+		Returns: make(map[string]*ReturnAttribute),
+	}
 
 	for _, subProp := range properties {
 		containsName := subProp.Name
@@ -187,16 +203,16 @@ func createReturnContains(properties []*api.Type) map[string]*ReturnAttribute {
 
 			// If the list contains nested objects, recursively create contains
 			if subProp.ItemType.Type == "NestedObject" && subProp.ItemType.Properties != nil {
-				containsAttr.Contains = createReturnContains(subProp.ItemType.Properties)
+				containsAttr.Contains = createReturnContains(subProp.ItemType.Properties).Returns
 			}
 		}
 
 		// Handle nested dictionary objects (recursive contains)
 		if containsAttr.Type == ReturnTypeDict && subProp.Properties != nil {
-			containsAttr.Contains = createReturnContains(subProp.Properties)
+			containsAttr.Contains = createReturnContains(subProp.Properties).Returns
 		}
 
-		contains[containsName] = containsAttr
+		contains.Returns[containsName] = containsAttr
 	}
 
 	return contains
@@ -204,7 +220,7 @@ func createReturnContains(properties []*api.Type) map[string]*ReturnAttribute {
 
 // parseReturnDescription converts API property description to Ansible return description format
 // Returns a string (single paragraph) with proper capitalization and trailing dot
-func parseReturnDescription(property *api.Type) interface{} {
+func parseReturnDescription(property *mmv1api.Type) interface{} {
 	if property == nil || property.Description == "" {
 		return fmt.Sprintf("The %s field.", strings.ToLower(property.Name))
 	}
@@ -230,7 +246,7 @@ func parseReturnDescription(property *api.Type) interface{} {
 }
 
 // determineReturnedCondition determines when a return value is returned based on property characteristics
-func determineReturnedCondition(property *api.Type) string {
+func determineReturnedCondition(property *mmv1api.Type) string {
 	if property == nil {
 		return "success"
 	}
@@ -247,20 +263,4 @@ func determineReturnedCondition(property *api.Type) string {
 
 	// Optional properties are returned when set
 	return "when set"
-}
-
-// ReturnsToYAML converts a map of ReturnAttribute to YAML string
-// This is used in templates to generate the RETURN block
-func ReturnsToYAML(returns map[string]*ReturnAttribute) string {
-	if returns == nil {
-		return ""
-	}
-
-	yamlData, err := yaml.Marshal(returns)
-	if err != nil {
-		log.Warn().Err(err).Msg("error marshaling returns to YAML")
-		return ""
-	}
-
-	return string(yamlData)
 }

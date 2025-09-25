@@ -88,24 +88,24 @@ func (td *TemplateData) writeFile(filePath, templateName string, input any) erro
 	return nil
 }
 
-func (td *TemplateData) GenerateCode(resource *ansible.Resource) error {
-	log.Info().Msgf("generating code for resource: %s", resource.AnsibleName())
+func (td *TemplateData) GenerateCode(module *ansible.Module) error {
+	log.Info().Msgf("generating code for resource: %s", module.Resource.AnsibleName())
 
 	if err := os.MkdirAll(td.ModuleDirectory, 0755); err != nil {
 		return fmt.Errorf("error creating module directory: %v", err)
 	}
 
-	moduleFile := path.Join(td.ModuleDirectory, fmt.Sprintf("%s.py", resource.AnsibleName()))
+	moduleFile := path.Join(td.ModuleDirectory, fmt.Sprintf("%s.py", module))
 
-	if err := td.writeFile(moduleFile, "plugins/module.tmpl", resource); err != nil {
+	if err := td.writeFile(moduleFile, "plugins/module.tmpl", module); err != nil {
 		return fmt.Errorf("error generating module file: %v", err)
 	}
 
 	return nil
 }
 
-func (td *TemplateData) GenerateTests(resource *ansible.Resource) error {
-	log.Info().Msgf("generating tests for resource: %s", resource.AnsibleName())
+func (td *TemplateData) GenerateTests(module *ansible.Module) error {
+	log.Info().Msgf("generating tests for resource: %s", module.Resource.AnsibleName())
 
 	if err := os.MkdirAll(td.IntegrationTestDirectory, 0755); err != nil {
 		return fmt.Errorf("error creating integration test directory: %v", err)
