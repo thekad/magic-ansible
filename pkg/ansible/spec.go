@@ -4,6 +4,7 @@
 package ansible
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
@@ -111,16 +112,25 @@ func NewOptionsFromAPI(resource *api.Resource) map[string]*Option {
 		optionName := google.Underscore(property.Name)
 
 		// Create the option
+		ansibleType, err := mapAPITypeToAnsible(property)
+		if err != nil {
+			log.Warn().Err(err).Msgf("error mapping type for property %s", property.Name)
+		}
+
 		option := &Option{
 			Description: parsePropertyDescription(property),
-			Type:        mapAPITypeToAnsible(property),
+			Type:        ansibleType,
 			Required:    property.Required,
 		}
 
 		// Handle list element types
 		if option.Type == AnsibleTypeList {
 			log.Debug().Msgf("%v is a list", property.Name)
-			option.Elements = mapAPITypeToAnsible(property.ItemType)
+			elementType, err := mapAPITypeToAnsible(property.ItemType)
+			if err != nil {
+				log.Warn().Err(err).Msgf("error mapping element type for property %s", property.Name)
+			}
+			option.Elements = elementType
 
 			// If the list contains nested objects, create suboptions for the element type
 			if property.ItemType.Type == "NestedObject" && property.ItemType.Properties != nil {
@@ -171,15 +181,24 @@ func createSuboptions(properties []*api.Type) map[string]*Option {
 		subOptionName := google.Underscore(subProp.Name)
 
 		// Create the suboption
+		subAnsibleType, err := mapAPITypeToAnsible(subProp)
+		if err != nil {
+			log.Warn().Err(err).Msgf("error mapping type for suboption %s", subProp.Name)
+		}
+
 		suboption := &Option{
 			Description: parsePropertyDescription(subProp),
-			Type:        mapAPITypeToAnsible(subProp),
+			Type:        subAnsibleType,
 			Required:    false, // Default to optional
 		}
 
 		// Handle list element types for suboptions
 		if subProp.ItemType != nil {
-			suboption.Elements = mapAPITypeToAnsible(subProp.ItemType)
+			subElementType, err := mapAPITypeToAnsible(subProp.ItemType)
+			if err != nil {
+				log.Warn().Err(err).Msgf("error mapping element type for suboption %s", subProp.Name)
+			}
+			suboption.Elements = subElementType
 
 			// If the list contains nested objects, recursively create suboptions
 			if subProp.ItemType.Type == "NestedObject" && subProp.ItemType.Properties != nil {
@@ -232,26 +251,34 @@ func parsePropertyDescription(property *api.Type) []interface{} {
 }
 
 // mapAPITypeToAnsible maps magic-modules API types to Ansible module types
-// Returns AnsibleType enum for type safety
-func mapAPITypeToAnsible(property *api.Type) Type {
+// Returns AnsibleType enum and error for better error handling
+func mapAPITypeToAnsible(property *api.Type) (Type, error) {
 	if property == nil {
-		return AnsibleTypeStr
+		return "", fmt.Errorf("property is nil")
+	}
+
+	if property.Type == "" {
+		return AnsibleTypeStr, fmt.Errorf("property type is empty, defaulting to string")
 	}
 
 	switch property.Type {
 	case "String":
-		return AnsibleTypeStr
+		return AnsibleTypeStr, nil
 	case "Integer":
-		return AnsibleTypeInt
+		return AnsibleTypeInt, nil
 	case "Boolean":
-		return AnsibleTypeBool
+		return AnsibleTypeBool, nil
 	case "NestedObject":
-		return AnsibleTypeDict
+		return AnsibleTypeDict, nil
+	case "KeyValueAnnotations":
+		return AnsibleTypeDict, nil
 	case "Array":
-		return AnsibleTypeList
+		return AnsibleTypeList, nil
 	case "Enum":
-		return AnsibleTypeStr
+		return AnsibleTypeStr, nil
+	case "ResourceRef":
+		return AnsibleTypeDict, nil
 	default:
-		return AnsibleTypeStr
+		return AnsibleTypeStr, fmt.Errorf("unknown API type '%s' defaulting to string", property.Type)
 	}
 }
