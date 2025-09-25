@@ -101,8 +101,8 @@ func init() {
 	log.Info().Msgf("Log level set to %s", zerolog.GlobalLevel())
 }
 
-// gitClone clones the git repository to the given path
-func gitClone(path string, ref string, pull bool) error {
+// doGitClone clones the git repository to the given path
+func doGitClone(path string, ref string, pull bool) error {
 	log.Info().Msgf("git-clone %s to %s\n", gitURL, path)
 	_, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL:      gitURL,
@@ -147,8 +147,8 @@ func gitClone(path string, ref string, pull bool) error {
 	return nil
 }
 
-// findProducts finds the matching product.yaml files in the given git directory
-func findProducts(gitDir string, names []string, templateDir string, overridesDir string) ([]*api.Product, error) {
+// doFindProducts finds the matching product.yaml files in the given git directory
+func doFindProducts(gitDir string, names []string, templateDir string, overridesDir string) ([]*api.Product, error) {
 	products := []*api.Product{}
 
 	allFiles, err := filepath.Glob(fmt.Sprintf("%s/mmv1/products/**/product.yaml", gitDir))
@@ -167,8 +167,8 @@ func findProducts(gitDir string, names []string, templateDir string, overridesDi
 	return products, nil
 }
 
-// populateResourcesByProduct populates the resources for the given product
-func populateResourcesByProduct(gitDir string, product *api.Product, names []string) error {
+// doPopulateResourcesByProduct populates the resources for the given product
+func doPopulateResourcesByProduct(gitDir string, product *api.Product, names []string) error {
 	allFiles, _ := filepath.Glob(fmt.Sprintf("%s/mmv1/products/%s/*.yaml", gitDir, product.Name))
 	for _, rf := range allFiles {
 		if filepath.Base(rf) == "product.yaml" {
@@ -190,10 +190,10 @@ func main() {
 	templateDir, _ := filepath.Abs(templates)
 	overrideDir, _ := filepath.Abs(overrides)
 
-	if err := gitClone(absDir, gitRev, gitPull); err != nil {
+	if err := doGitClone(absDir, gitRev, gitPull); err != nil {
 		log.Fatal().Err(err).Msg("failed to clone git repository")
 	}
-	productsToGenerate, err := findProducts(absDir, products, templateDir, overrideDir)
+	productsToGenerate, err := doFindProducts(absDir, products, templateDir, overrideDir)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to find products")
 	}
@@ -208,7 +208,7 @@ func main() {
 	modulesToGenerate := []*ansible.Module{}
 	for _, p := range productsToGenerate {
 		// populate resources for given products
-		err := populateResourcesByProduct(gitDir, p, resources)
+		err := doPopulateResourcesByProduct(gitDir, p, resources)
 		if err != nil {
 			log.Fatal().Err(err).Msg("failed to populate resources for product")
 		}
