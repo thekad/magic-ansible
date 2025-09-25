@@ -137,7 +137,7 @@ func NewReturnBlockFromMmv1(resource *mmv1api.Resource) *ReturnBlock {
 		}
 
 		returnAttr := &ReturnAttribute{
-			Description: parseReturnDescription(property),
+			Description: parseDescription(property.GetDescription()),
 			Returned:    determineReturnedCondition(property),
 			Type:        returnType,
 		}
@@ -188,7 +188,7 @@ func createReturnContains(properties []*mmv1api.Type) *ReturnBlock {
 		}
 
 		containsAttr := &ReturnAttribute{
-			Description: parseReturnDescription(subProp),
+			Description: parseDescription(subProp.GetDescription()),
 			Returned:    determineReturnedCondition(subProp),
 			Type:        subReturnType,
 		}
@@ -216,33 +216,6 @@ func createReturnContains(properties []*mmv1api.Type) *ReturnBlock {
 	}
 
 	return contains
-}
-
-// parseReturnDescription converts API property description to Ansible return description format
-// Returns a string (single paragraph) with proper capitalization and trailing dot
-func parseReturnDescription(property *mmv1api.Type) interface{} {
-	if property == nil || property.Description == "" {
-		return fmt.Sprintf("The %s field.", strings.ToLower(property.Name))
-	}
-
-	desc := strings.TrimSpace(property.Description)
-
-	// cleanup description from magic-modules
-	desc = strings.TrimPrefix(desc, "Required. ")
-	desc = strings.TrimPrefix(desc, "Optional. ")
-	desc = strings.TrimPrefix(desc, "Immutable. ")
-
-	// Ensure description starts with a capital letter
-	if len(desc) > 0 {
-		desc = strings.ToUpper(desc[:1]) + desc[1:]
-	}
-
-	// Ensure description ends with a period
-	if !strings.HasSuffix(desc, ".") {
-		desc += "."
-	}
-
-	return desc
 }
 
 // determineReturnedCondition determines when a return value is returned based on property characteristics
