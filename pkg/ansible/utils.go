@@ -109,10 +109,8 @@ func parsePropertyDescription(property *mmv1api.Type) []string {
 	if property.Type == "ResourceRef" {
 		sourceRefDesc := []string{
 			fmt.Sprintf("This field is a reference to a %s resource in GCP.", property.Resource),
-			"It can be specified in two ways.",
-			fmt.Sprintf("First, you can place a dictionary with key '%s' matching your resource.", string(property.Imports)),
-			fmt.Sprintf("Alternatively, you can add `register: name-of-resource` to a %s creation task", property.Resource),
-			"and then set this field to `{{ name-of-resource }}`.",
+			fmt.Sprintf("It can be specified in two ways: First, you can place a dictionary with key '%s' matching your resource.", string(property.Imports)),
+			fmt.Sprintf("Alternatively, you can add `register: name-of-resource` to a %s task and then set this field to `{{ name-of-resource }}`.", property.Resource),
 		}
 		cleanLines = append(cleanLines, sourceRefDesc...)
 	}

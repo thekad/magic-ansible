@@ -52,9 +52,10 @@ func NewDocumentationFromOptions(resource *api.Resource, options map[string]*Opt
 	docFragments := []string{
 		"google.cloud.gcp",
 	}
+	authors := []string{"Google Inc. (@googlecloudplatform)"}
 	return &Documentation{
 		Module:           resource.AnsibleName(),
-		Author:           []string{"Google Inc. (@googlecloudplatform)"},
+		Author:           authors,
 		ShortDescription: fmt.Sprintf("Creates a GCP %s.%s resource", resource.Parent.Mmv1.Name, resource.Mmv1.Name),
 		Description:      cleanModuleDescription(resource.Mmv1.Description),
 		Options:          options,
