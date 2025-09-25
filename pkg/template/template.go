@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/rs/zerolog/log"
@@ -103,8 +104,32 @@ func (td *TemplateData) GenerateCode(module *ansible.Module) error {
 }
 
 func (td *TemplateData) GenerateTests(module *ansible.Module) error {
-	if err := os.MkdirAll(td.IntegrationTestDirectory, 0755); err != nil {
-		return fmt.Errorf("error creating integration test directory: %v", err)
+	directories := []string{
+		td.IntegrationTestDirectory,
+		path.Join(td.IntegrationTestDirectory, module.Name),
+		path.Join(td.IntegrationTestDirectory, module.Name, "defaults"),
+		path.Join(td.IntegrationTestDirectory, module.Name, "meta"),
+		path.Join(td.IntegrationTestDirectory, module.Name, "tasks"),
+	}
+	for _, directory := range directories {
+		log.Debug().Msgf("creating integration test directory: %s", directory)
+		if err := os.MkdirAll(directory, 0755); err != nil {
+			return fmt.Errorf("error creating integration test directory: %v", err)
+		}
+	}
+
+	testFiles := []string{
+		path.Join(td.IntegrationTestDirectory, module.Name, "aliases"),
+		path.Join(td.IntegrationTestDirectory, module.Name, "defaults", "main.yml"),
+		path.Join(td.IntegrationTestDirectory, module.Name, "meta", "main.yml"),
+		path.Join(td.IntegrationTestDirectory, module.Name, "tasks", "autogen.yml"),
+	}
+	for _, testFile := range testFiles {
+		log.Debug().Msgf("creating integration test file: %s", testFile)
+		templateName := fmt.Sprintf("tests/integration/%s.tmpl", strings.TrimPrefix(testFile, filepath.Join(td.IntegrationTestDirectory, module.Name)))
+		if err := td.writeFile(testFile, templateName, module); err != nil {
+			return fmt.Errorf("error creating integration test file: %v", err)
+		}
 	}
 
 	return nil
