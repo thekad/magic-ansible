@@ -1,0 +1,30 @@
+{{ template "python_file_header" . }}
+from __future__ import absolute_import, division, print_function
+
+__metaclass__ = type
+
+################################################################################
+# Documentation
+################################################################################
+
+ANSIBLE_METADATA = {
+    "metadata_version": "1.1",
+    "status": ["preview"],
+    "supported_by": "community"
+}
+
+DOCUMENTATION = r"""
+---
+{{ $.Documentation.ToYAML }}"""
+
+{{- if gt (len $.Api.Examples) 0 }}
+EXAMPLES = r"""
+{{ range $.Api.Examples }}
+{{- .TestHCLText }}
+{{- end }}
+"""
+{{- end }}
+
+RETURN = r"""
+
+"""
