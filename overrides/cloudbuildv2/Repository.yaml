@@ -8,11 +8,3 @@ examples:
   - name: cloudbuildv2_repository_github_doc
     _drop: true
 
-# Update the parent_connection parameter documentation
-parameters:
-  - name: 'parent_connection'
-    type: ResourceRef
-    description: >
-      The connection for the resource.
-      You can create a connection and register it into a variable, then use the registered variable here (recommended).
-      You can pass a dictionary directly to the module with a `self_link` key.
