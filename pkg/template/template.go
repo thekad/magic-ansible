@@ -72,7 +72,7 @@ func (td *TemplateData) writeFile(filePath, templateName string, input any) erro
 		if !td.OverWrite {
 			return fmt.Errorf("file already exists: %s", filePath)
 		} else {
-			log.Warn().Msgf("file already exists: %s", filePath)
+			log.Warn().Msgf("overwriting file: %s", filePath)
 		}
 	}
 
@@ -89,8 +89,6 @@ func (td *TemplateData) writeFile(filePath, templateName string, input any) erro
 }
 
 func (td *TemplateData) GenerateCode(module *ansible.Module) error {
-	log.Info().Msgf("generating code for resource: %s", module.Resource.AnsibleName())
-
 	if err := os.MkdirAll(td.ModuleDirectory, 0755); err != nil {
 		return fmt.Errorf("error creating module directory: %v", err)
 	}
@@ -105,8 +103,6 @@ func (td *TemplateData) GenerateCode(module *ansible.Module) error {
 }
 
 func (td *TemplateData) GenerateTests(module *ansible.Module) error {
-	log.Info().Msgf("generating tests for resource: %s", module.Resource.AnsibleName())
-
 	if err := os.MkdirAll(td.IntegrationTestDirectory, 0755); err != nil {
 		return fmt.Errorf("error creating integration test directory: %v", err)
 	}

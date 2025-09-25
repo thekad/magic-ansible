@@ -27,14 +27,23 @@ RETURN = r"""
 # Imports
 ################################################################################
 
-from ansible_collections.google.cloud.plugins.module_utils.gcp_utils import (
-    navigate_hash,
-    GcpSession,
-    GcpModule,
-    GcpRequest,
-    remove_nones_from_dict,
-)
+import ansible_collections.google.cloud.plugins.module_utils.gcp_utils as gcp
 import json
+{{ if $.CustomCode.CustomImport | trimSpace | len | gt 0 -}}
+# BEGIN Custom imports
+{{ $.CustomCode.CustomImport | trimSpace }}
+# END Custom imports
+{{- end }}
+
+def self_link(module):
+    params = module.params
+{{- range $.UrlParamOnlyProperties }}
+{{- if streq .Type "ResourceRef" }}
+    params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
+{{- end }}
+{{- end }}
+
+    return "{{ $.SelfLinkTpl }}".format(**params)
 
 ################################################################################
 # Main

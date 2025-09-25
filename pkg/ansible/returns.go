@@ -159,7 +159,6 @@ func convertPropertiesToReturns(properties []*mmv1api.Type) map[string]*ReturnAt
 
 		// Handle list element types
 		if returnAttr.Type == ReturnTypeList && property.ItemType != nil {
-			log.Debug().Msgf("%v is a list return", property.Name)
 			elementType, err := mapMmv1TypeToReturnType(property.ItemType)
 			if err != nil {
 				log.Warn().Err(err).Msgf("error mapping return element type for property %s", property.Name)

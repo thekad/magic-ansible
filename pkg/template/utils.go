@@ -29,6 +29,7 @@ func funcMap() gotpl.FuncMap {
 		"now":            time.Now,
 		"sortProperties": sortPropertiesFunc,
 		"split":          strings.Split,
+		"streq":          strings.EqualFold,
 		"trim":           strings.Trim,
 		"trimSpace":      strings.TrimSpace,
 		"underscore":     google.Underscore,
@@ -68,27 +69,27 @@ func sortPropertiesFunc(props []*api.Type) []*api.Type {
 
 // Comparison functions for templates
 func gtFunc(a, b interface{}) bool {
-	return compareValues(a, b) > 0
+	return compareValues(b, a) > 0
 }
 
 func ltFunc(a, b interface{}) bool {
-	return compareValues(a, b) < 0
+	return compareValues(b, a) < 0
 }
 
 func gteFunc(a, b interface{}) bool {
-	return compareValues(a, b) >= 0
+	return compareValues(b, a) >= 0
 }
 
 func lteFunc(a, b interface{}) bool {
-	return compareValues(a, b) <= 0
+	return compareValues(b, a) <= 0
 }
 
 func eqFunc(a, b interface{}) bool {
-	return compareValues(a, b) == 0
+	return compareValues(b, a) == 0
 }
 
 func neFunc(a, b interface{}) bool {
-	return compareValues(a, b) != 0
+	return compareValues(b, a) != 0
 }
 
 func compareValues(a, b interface{}) int {

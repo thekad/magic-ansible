@@ -198,7 +198,7 @@ func convertSuboptionsToArgOptions(suboptions map[string]*Option) map[string]*Ar
 func isSensitiveField(fieldName string) bool {
 	sensitivePatterns := []string{
 		"password", "secret", "key", "token", "credential", "auth",
-		"private", "cert", "certificate", "passphrase", "pin",
+		"private", "cert", "certificate", "passphrase",
 	}
 
 	lowerName := strings.ToLower(fieldName)

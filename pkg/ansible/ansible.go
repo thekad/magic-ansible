@@ -4,7 +4,13 @@
 package ansible
 
 import (
+	"cmp"
+	"fmt"
+	"slices"
+	"strings"
+
 	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
+	mmv1resource "github.com/GoogleCloudPlatform/magic-modules/mmv1/api/resource"
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
 	"github.com/rs/zerolog/log"
 	"github.com/thekad/magic-ansible/pkg/api"
@@ -23,10 +29,13 @@ func NewFromResource(resource *api.Resource) *Module {
 	m := &Module{
 		Resource: resource,
 		Options:  NewOptionsFromMmv1(resource.Mmv1),
-		Returns:  NewReturnBlockFromMmv1(resource.Mmv1),
 		Examples: NewExampleBlockFromMmv1(resource.Mmv1),
 	}
+	log.Info().Msgf("creating return block for %s", resource.AnsibleName())
+	m.Returns = NewReturnBlockFromMmv1(resource.Mmv1)
+	log.Info().Msgf("creating documentation for %s", resource.AnsibleName())
 	m.Documentation = NewDocumentationFromOptions(resource, m.Options)
+	log.Info().Msgf("creating argument spec for %s", resource.AnsibleName())
 	m.ArgumentSpec = NewArgSpecFromOptions(m.Options)
 	return m
 }
@@ -138,7 +147,6 @@ func convertPropertiesToOptions(properties []*mmv1api.Type) map[string]*Option {
 
 		// Handle list element types
 		if option.Type == TypeList && property.ItemType != nil {
-			log.Debug().Msgf("%v is a list", property.Name)
 			elementType, err := mapMmv1ToAnsible(property.ItemType)
 			if err != nil {
 				log.Warn().Err(err).Msgf("error mapping element type for property %s", property.Name)
@@ -160,4 +168,50 @@ func convertPropertiesToOptions(properties []*mmv1api.Type) map[string]*Option {
 	}
 
 	return options
+}
+
+// CustomCode returns the custom code (if any) defined in the API Resource YAML file
+func (m *Module) CustomCode() mmv1resource.CustomCode {
+	return m.Resource.Mmv1.CustomCode
+}
+
+func (m *Module) GettableProperties() []*mmv1api.Type {
+	return sortProperties(m.Resource.Mmv1.GettableProperties())
+}
+
+func (m *Module) SettableProperties() []*mmv1api.Type {
+	return sortProperties(m.Resource.Mmv1.SettableProperties())
+}
+
+func (m *Module) UrlParamOnlyProperties() []*mmv1api.Type {
+	return sortProperties(google.Select(m.Resource.Mmv1.AllUserProperties(), func(p *mmv1api.Type) bool {
+		return p.UrlParamOnly
+	}))
+}
+
+func (m *Module) BaseUrl() string {
+	productVersions := m.Resource.Parent.Mmv1.Versions
+	for _, version := range productVersions {
+		if version.Name == "ga" {
+			return version.BaseUrl
+		}
+	}
+
+	return ""
+}
+
+func sortProperties(props []*mmv1api.Type) []*mmv1api.Type {
+	slices.SortFunc(props, func(a, b *mmv1api.Type) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+	return props
+}
+
+func (m *Module) AllUserProperties() []*mmv1api.Type {
+	return sortProperties(m.Resource.Mmv1.AllUserProperties())
+}
+
+func (m *Module) SelfLinkTpl() string {
+	tpl := strings.ReplaceAll(strings.ReplaceAll(m.Resource.Mmv1.SelfLink, "{{", "{"), "}}", "}")
+	return fmt.Sprintf("%s%s", m.BaseUrl(), tpl)
 }
