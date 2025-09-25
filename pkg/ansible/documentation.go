@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/thekad/magic-ansible/pkg/api"
-	"gopkg.in/yaml.v3"
 )
 
 var STANDARD_MODULE_REQUIREMENTS = []string{
@@ -50,7 +49,8 @@ type Documentation struct {
 	Notes []string `yaml:"notes,omitempty" json:"notes,omitempty"`
 }
 
-func BuildDocumentationWithOptions(resource *api.Resource, options map[string]*Option) *Documentation {
+// NewDocumentationFromOptions creates a new Documentation from a resource and options
+func NewDocumentationFromOptions(resource *api.Resource, options map[string]*Option) *Documentation {
 	urlNotes := []string{
 		fmt.Sprintf("API Reference: U(%s)", resource.Mmv1.References.Api),
 		fmt.Sprintf("Official Documentation: U(%s)", resource.Mmv1.References.Guides["Official Documentation"]),
@@ -67,11 +67,6 @@ func BuildDocumentationWithOptions(resource *api.Resource, options map[string]*O
 }
 
 // Show the documentation as a YAML string
-func (d *Documentation) String() string {
-	yaml, err := yaml.Marshal(d)
-	if err != nil {
-		return ""
-	}
-
-	return string(yaml)
+func (d *Documentation) ToString() string {
+	return ToYAML(d)
 }

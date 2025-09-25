@@ -21,7 +21,7 @@ func NewExampleBlockFromMmv1(resource *mmv1api.Resource) *ExampleBlock {
 	}
 }
 
-func (e *ExampleBlock) String() string {
+func (e *ExampleBlock) ToString() string {
 	separator := fmt.Sprintf("%s\n", strings.Repeat("#", 80))
 	examples := []string{}
 	for _, example := range e.Examples {

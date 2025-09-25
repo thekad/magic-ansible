@@ -5,11 +5,9 @@ package ansible
 
 import (
 	"fmt"
-	"strings"
 
 	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
 	"github.com/rs/zerolog/log"
-	"gopkg.in/yaml.v3"
 )
 
 // ReturnType represents the data types returned by the module
@@ -27,7 +25,7 @@ const (
 )
 
 // String returns the string representation of the AnsibleType
-func (t ReturnType) String() string {
+func (t ReturnType) ToString() string {
 	return string(t)
 }
 
@@ -59,12 +57,8 @@ type ReturnBlock struct {
 	Returns map[string]*ReturnAttribute `yaml:"returns" json:"returns"`
 }
 
-func (rb *ReturnBlock) String() string {
-	y, err := yaml.Marshal(rb.Returns)
-	if err != nil {
-		return ""
-	}
-	return string(y)
+func (rb *ReturnBlock) ToString() string {
+	return ToYAML(rb.Returns)
 }
 
 // mapMmv1TypeToReturnType maps magic-modules API types to Ansible module return types
