@@ -13,6 +13,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
+	"github.com/thekad/magic-ansible/pkg/ansible"
 )
 
 func funcMap() gotpl.FuncMap {
@@ -26,6 +27,7 @@ func funcMap() gotpl.FuncMap {
 		"lte":            lteFunc,
 		"ne":             neFunc,
 		"now":            time.Now,
+		"returnsToYAML":  ansible.ReturnsToYAML,
 		"sortProperties": sortPropertiesFunc,
 		"split":          strings.Split,
 		"trim":           strings.Trim,
