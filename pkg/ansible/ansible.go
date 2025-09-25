@@ -19,6 +19,7 @@ type Module struct {
 	Documentation *Documentation
 	Returns       *ReturnBlock
 	Examples      *ExampleBlock
+	ArgumentSpec  *ArgumentSpec
 }
 
 func NewFromResource(resource *api.Resource) *Module {
