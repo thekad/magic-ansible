@@ -1,0 +1,8 @@
+# don't add default output folder to git
+output/
+
+# don't add default git clone folder to git
+magic-modules/
+
+# don't add binary to git
+magic-ansible
