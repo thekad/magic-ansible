@@ -20,6 +20,7 @@ func funcMap() gotpl.FuncMap {
 		"eq":             eqFunc,
 		"gt":             gtFunc,
 		"gte":            gteFunc,
+		"indent":         indentFunc,
 		"len":            lenFunc,
 		"lines":          splitLinesFunc,
 		"lt":             ltFunc,
@@ -115,4 +116,37 @@ func toInt64(v interface{}) int64 {
 	default:
 		return 0
 	}
+}
+
+// indentFunc indents each line of the given text by the specified number of spaces
+// Usage in templates: {{ "some text" | indent 4 }} or {{ .SomeMultilineText | indent 8 }}
+func indentFunc(spaces int, first bool, text string) string {
+	if spaces < 0 {
+		spaces = 0
+	}
+
+	if text == "" {
+		return text
+	}
+
+	// Create the indentation string
+	indentation := strings.Repeat(" ", spaces)
+
+	// Split text into lines
+	lines := strings.Split(text, "\n")
+
+	skip := !first
+	// Indent each line
+	indentedLines := make([]string, len(lines))
+	for i, line := range lines {
+		if skip {
+			indentedLines[i] = line
+			skip = false
+			continue
+		}
+		indentedLines[i] = indentation + line
+	}
+
+	// Join lines back together
+	return strings.Join(indentedLines, "\n")
 }
