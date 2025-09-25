@@ -1,17 +1,18 @@
 ---
+# original file: https://github.com/GoogleCloudPlatform/magic-modules/blob/main/mmv1/products/cloudbuildv2/Repository.yaml
+
+# remove tf only examples
 examples:
-  - name: 'cloudbuildv2_repository_ghe'
-    primary_resource_id: 'primary'
-    vars:
-      connection_name: 'connection'
-      repository_name: 'repository'
-  - name: 'cloudbuildv2_repository_github'
-    primary_resource_id: 'primary'
-    vars:
-      connection_name: 'connection'
-      repository_name: 'repository'
-  - name: 'cloudbuildv2_repository_gle'
-    primary_resource_id: 'primary'
-    vars:
-      connection_name: 'connection'
-      repository_name: 'repository'
+  - name: cloudbuildv2_repository_ghe_doc
+    _drop: true
+  - name: cloudbuildv2_repository_github_doc
+    _drop: true
+
+# Update the parent_connection parameter documentation
+parameters:
+  - name: 'parent_connection'
+    type: ResourceRef
+    description: |
+      The connection for the resource. This can set in two ways:
+      You can create a connection and register it into a variable, then use the registered variable here (recommended)
+      You can pass a dictionary directly to the module with a `self_link` key.
