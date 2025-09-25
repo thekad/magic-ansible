@@ -78,10 +78,10 @@ type Option struct {
 	RequiredBy map[string][]string `yaml:"required_by,omitempty" json:"required_by,omitempty"`
 }
 
-// NewOptionsFromAPI creates a map of Ansible options from a magic-modules API Resource
+// NewOptionsFromMmv1 creates a map of Ansible options from a magic-modules API Resource
 // This constructor extracts user properties from the API Resource and converts them
 // to Ansible module options following the documentation format
-func NewOptionsFromAPI(resource *api.Resource) map[string]*Option {
+func NewOptionsFromMmv1(resource *api.Resource) map[string]*Option {
 	if resource == nil {
 		return nil
 	}

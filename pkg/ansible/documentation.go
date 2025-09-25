@@ -49,7 +49,7 @@ type Documentation struct {
 	Notes []string `yaml:"notes,omitempty" json:"notes,omitempty"`
 }
 
-func NewDocumentationFromAPI(resource *Resource) *Documentation {
+func NewDocumentationFromMmv1(resource *Resource) *Documentation {
 	urlNotes := []string{
 		fmt.Sprintf("API Reference: U(%s)", resource.Mmv1.References.Api),
 		fmt.Sprintf("Official Documentation: U(%s)", resource.Mmv1.References.Guides["Official Documentation"]),
@@ -59,7 +59,7 @@ func NewDocumentationFromAPI(resource *Resource) *Documentation {
 		Module:           resource.AnsibleName(),
 		ShortDescription: fmt.Sprintf("Creates a GCP %s.%s resource", resource.Parent.Mmv1.Name, resource.Mmv1.Name),
 		Description:      resource.Mmv1.Description,
-		Options:          NewOptionsFromAPI(resource.Mmv1),
+		Options:          NewOptionsFromMmv1(resource.Mmv1),
 		Requirements:     STANDARD_MODULE_REQUIREMENTS,
 		Notes:            resourceNotes,
 	}
