@@ -15,13 +15,13 @@ ANSIBLE_METADATA = {
 
 DOCUMENTATION = r"""
 ---
-{{ $.Documentation }}"""
+{{ $.Documentation.ToString }}"""
 
 EXAMPLES = r"""
-{{ $.Examples }}"""
+{{ $.Examples.ToString }}"""
 
 RETURN = r"""
-{{ $.Returns }}"""
+{{ $.Returns.ToString }}"""
 
 ################################################################################
 # Imports
@@ -43,3 +43,7 @@ import json
 
 def main():
     """Main function"""
+
+    module = GcpModule(
+        {{ $.ArgumentSpec.ToString | indent 8 false }}
+    )
