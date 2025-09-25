@@ -27,7 +27,7 @@ RETURN = r"""
 # Imports
 ################################################################################
 
-import ansible_collections.google.cloud.plugins.module_utils.gcp_utils as gcp
+from ansible_collections.google.cloud.plugins.module_utils import gcp_utils as gcp
 import json
 {{ if $.CustomCode.CustomImport | trimSpace | len | gt 0 -}}
 # BEGIN Custom imports
@@ -45,6 +45,16 @@ def self_link(module):
 
     return "{{ $.SelfLinkTpl }}".format(**params)
 
+def collection_link(module):
+    params = module.params
+{{- range $.UrlParamOnlyProperties }}
+{{- if streq .Type "ResourceRef" }}
+    params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
+{{- end }}
+{{- end }}
+
+    return "{{ $.CollectionTpl }}".format(**params)
+
 ################################################################################
 # Main
 ################################################################################
@@ -53,7 +63,7 @@ def self_link(module):
 def main():
     """Main function"""
 
-    module = GcpModule(
+    module = gcp.Module(
         {{ $.ArgumentSpec.ToString | indent 8 false }}
     )
 
