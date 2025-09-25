@@ -54,13 +54,25 @@ func NewDocumentationFromOptions(resource *api.Resource, options map[string]*Opt
 	}
 	return &Documentation{
 		Module:           resource.AnsibleName(),
+		Author:           []string{"Google Inc. (@googlecloudplatform)"},
 		ShortDescription: fmt.Sprintf("Creates a GCP %s.%s resource", resource.Parent.Mmv1.Name, resource.Mmv1.Name),
-		Description:      strings.Split(resource.Mmv1.Description, "\n"),
+		Description:      cleanModuleDescription(resource.Mmv1.Description),
 		Options:          options,
 		Requirements:     STANDARD_MODULE_REQUIREMENTS,
 		Notes:            resourceNotes,
 		DocFragments:     docFragments,
 	}
+}
+
+func cleanModuleDescription(description string) []string {
+	var cleanLines []string
+	for _, line := range strings.Split(description, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			cleanLines = append(cleanLines, line)
+		}
+	}
+	return cleanLines
 }
 
 // Show the documentation as a YAML string

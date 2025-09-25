@@ -95,8 +95,7 @@ func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
 	}
 
 	// Process all user properties from the API Resource
-	//convertedOptions := convertPropertiesToOptions(resource.AllUserProperties())
-	convertedOptions := convertPropertiesToOptions(resource.SettableProperties())
+	convertedOptions := convertPropertiesToOptions(resource.AllUserProperties())
 
 	// Merge the converted options with the state option
 	for name, option := range convertedOptions {

@@ -93,10 +93,13 @@ func NewArgSpecFromOptions(options map[string]*Option) *ArgumentSpec {
 	// Convert each option to an argument option
 	for optionName, option := range options {
 		argOption := &ArgumentOption{
-			Type:     option.Type.String(),
-			Required: option.Required,
-			Default:  option.Default,
-			Choices:  option.Choices,
+			Type:    option.Type.String(),
+			Default: option.Default,
+			Choices: option.Choices,
+		}
+
+		if option.Required && option.Default == nil {
+			argOption.Required = true
 		}
 
 		// Convert elements type
@@ -216,7 +219,7 @@ func (as *ArgumentSpec) ToString() string {
 	}
 
 	var builder strings.Builder
-	builder.WriteString("argument_spec = dict(\n")
+	builder.WriteString("argument_spec=dict(\n")
 
 	// Sort argument names with priority ordering for readability
 	argNames := make([]string, 0, len(as.Arguments))
@@ -338,7 +341,7 @@ func (as *ArgumentSpec) writeNestedOptions(builder *strings.Builder, options map
 		}
 
 		// Add required
-		if option.Required {
+		if option.Required && option.Default == nil {
 			builder.WriteString(fmt.Sprintf("%s    required=True,\n", indent))
 		}
 
@@ -479,8 +482,8 @@ func pythonIdentifier(s string) string {
 // pythonQuote adds single quotes around a string for Python
 func pythonQuote(s string) string {
 	// Escape single quotes in the string
-	escaped := strings.ReplaceAll(s, "'", "\\'")
-	return fmt.Sprintf("'%s'", escaped)
+	escaped := strings.ReplaceAll(s, "\"", "\\\"")
+	return fmt.Sprintf("\"%s\"", escaped)
 }
 
 // pythonValue converts a Go value to its Python representation

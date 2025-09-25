@@ -12,6 +12,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const MAX_DESCRIPTION_LENGTH = 120
+
 func (m *Module) String() string {
 	return m.Resource.AnsibleName()
 }
@@ -89,14 +91,14 @@ func parsePropertyDescription(property *mmv1api.Type) []string {
 	immutable := strings.HasPrefix(description, "Immutable.")
 	description = strings.TrimPrefix(description, "Immutable. ") // a note is added to the description if the property is immutable
 
-	// Split description into lines and clean them up
-	lines := strings.Split(description, "\n")
+	// Split description by newlines, then by sentences, then by length
+	sentences := strings.Split(description, ". ")
 	var cleanLines []string
 
-	for _, line := range lines {
+	for _, line := range sentences {
 		trimmed := strings.TrimSpace(line)
 		if trimmed != "" {
-			cleanLines = append(cleanLines, trimmed)
+			cleanLines = append(cleanLines, fmt.Sprintf("%s.", strings.TrimSuffix(trimmed, ".")))
 		}
 	}
 
@@ -123,6 +125,7 @@ func parsePropertyDescription(property *mmv1api.Type) []string {
 }
 
 // ToYAML converts an interface to YAML format with 2-space indentation
+// Uses folded style for description fields
 func ToYAML(data interface{}) string {
 	if data == nil {
 		return ""
@@ -134,11 +137,101 @@ func ToYAML(data interface{}) string {
 	// Set indentation to 2 spaces
 	encoder.SetIndent(2)
 
-	err := encoder.Encode(data)
+	// Create a node tree and set folded style for description fields
+	node := &yaml.Node{}
+	err := node.Encode(data)
+	if err != nil {
+		return ""
+	}
+
+	// Walk the node tree and set folded style for description fields
+	setFoldedStyleForDescriptions(node)
+
+	err = encoder.Encode(node)
 	if err != nil {
 		return ""
 	}
 
 	encoder.Close()
 	return buf.String()
+}
+
+// setFoldedStyleForDescriptions recursively sets folded style for description fields
+func setFoldedStyleForDescriptions(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+
+	// If this is a mapping node, look for description keys
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valueNode := node.Content[i+1]
+
+			// Check if the key is "description"
+			if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "description" {
+				// Set folded style for the description value
+				if valueNode.Kind == yaml.SequenceNode {
+					// For arrays of strings, set each string to use folded style
+					for _, item := range valueNode.Content {
+						if item.Kind == yaml.ScalarNode && item.Tag == "!!str" {
+							if len(item.Value) > MAX_DESCRIPTION_LENGTH {
+								item.Style = yaml.FoldedStyle
+								item.Value = strings.Join(breakLineByLength(item.Value), "\n")
+							}
+						}
+					}
+				} else if valueNode.Kind == yaml.ScalarNode && valueNode.Tag == "!!str" {
+					// For single strings, use folded style
+					if len(valueNode.Value) > MAX_DESCRIPTION_LENGTH {
+						valueNode.Style = yaml.FoldedStyle
+						valueNode.Value = strings.Join(breakLineByLength(valueNode.Value), "\n")
+					}
+				}
+			}
+		}
+	}
+
+	// Recursively process child nodes
+	for _, child := range node.Content {
+		setFoldedStyleForDescriptions(child)
+	}
+}
+
+// breakLineByLength breaks a line into chunks of maxLength characters or less, breaking on word boundaries
+func breakLineByLength(line string) []string {
+	if len(line) <= MAX_DESCRIPTION_LENGTH {
+		return []string{line}
+	}
+
+	var chunks []string
+	words := strings.Fields(line) // Split by whitespace
+	currentChunk := ""
+
+	for _, word := range words {
+		// Check if adding this word would exceed the limit
+		testChunk := currentChunk
+		if testChunk != "" {
+			testChunk += " "
+		}
+		testChunk += word
+
+		if len(testChunk) <= MAX_DESCRIPTION_LENGTH {
+			// Word fits, add it to current chunk
+			currentChunk = testChunk
+		} else {
+			// Word doesn't fit, start a new chunk
+			if currentChunk != "" {
+				chunks = append(chunks, currentChunk)
+			}
+			currentChunk = word
+		}
+	}
+
+	// Add the last chunk if it's not empty
+	if currentChunk != "" {
+		chunks = append(chunks, currentChunk)
+	}
+
+	return chunks
 }

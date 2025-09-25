@@ -47,3 +47,15 @@ def main():
     module = GcpModule(
         {{ $.ArgumentSpec.ToString | indent 8 false }}
     )
+
+    changed = False
+
+    module.exit_json(
+        changed=changed,
+        state=module.params["state"],
+        **module.params
+    )
+
+
+if __name__ == "__main__":
+    main()
