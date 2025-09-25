@@ -1,7 +1,7 @@
 // Copyright 2025 Red Hat Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-package api
+package ansible
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
+	"github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
@@ -28,7 +28,7 @@ type Configurable interface {
 type Product struct {
 	Name         string
 	File         string
-	ApiPtr       *mmv1api.Product
+	ApiPtr       *api.Product
 	Resources    []*Resource
 	TemplateDir  string
 	OverridesDir string
@@ -40,7 +40,7 @@ func NewProduct(yamlPath string, templateDir string, overridesDir string) *Produ
 	return &Product{
 		Name:         strings.ToLower(name),
 		File:         yamlPath,
-		ApiPtr:       &mmv1api.Product{},
+		ApiPtr:       &api.Product{},
 		TemplateDir:  templateDir,
 		OverridesDir: overridesDir,
 	}
@@ -86,7 +86,7 @@ func (p *Product) ApplyOverrides(rootNode *yaml.Node) {
 type Resource struct {
 	Name         string
 	File         string
-	ApiPtr       *mmv1api.Resource
+	ApiPtr       *api.Resource
 	Parent       *Product
 	TemplateDir  string
 	OverridesDir string
@@ -99,7 +99,7 @@ func NewResource(yamlPath string, parent *Product, templateDir string, overrides
 	return &Resource{
 		Name:         name,
 		File:         yamlPath,
-		ApiPtr:       &mmv1api.Resource{},
+		ApiPtr:       &api.Resource{},
 		Parent:       parent,
 		TemplateDir:  templateDir,
 		OverridesDir: overridesDir,

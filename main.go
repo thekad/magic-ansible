@@ -16,7 +16,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/thekad/magic-ansible/pkg/api"
+	"github.com/thekad/magic-ansible/pkg/ansible"
 	tpl "github.com/thekad/magic-ansible/pkg/template"
 )
 
@@ -147,8 +147,8 @@ func gitClone(path string, ref string, pull bool) error {
 }
 
 // findProducts finds the matching product.yaml files in the given git directory
-func findProducts(gitDir string, names []string, templateDir string, overridesDir string) ([]*api.Product, error) {
-	products := []*api.Product{}
+func findProducts(gitDir string, names []string, templateDir string, overridesDir string) ([]*ansible.Product, error) {
+	products := []*ansible.Product{}
 
 	allFiles, err := filepath.Glob(fmt.Sprintf("%s/mmv1/products/**/product.yaml", gitDir))
 	if err != nil {
@@ -158,7 +158,7 @@ func findProducts(gitDir string, names []string, templateDir string, overridesDi
 	for _, pf := range allFiles {
 		pName := filepath.Base(filepath.Dir(pf))
 		if len(names) == 0 || slices.Contains(names, pName) {
-			p := api.NewProduct(pf, templateDir, overridesDir)
+			p := ansible.NewProduct(pf, templateDir, overridesDir)
 			products = append(products, p)
 		}
 	}
@@ -167,7 +167,7 @@ func findProducts(gitDir string, names []string, templateDir string, overridesDi
 }
 
 // populateResourcesByProduct populates the resources for the given product
-func populateResourcesByProduct(gitDir string, product *api.Product, names []string) error {
+func populateResourcesByProduct(gitDir string, product *ansible.Product, names []string) error {
 	allFiles, _ := filepath.Glob(fmt.Sprintf("%s/mmv1/products/%s/*.yaml", gitDir, product.Name))
 	for _, rf := range allFiles {
 		if filepath.Base(rf) == "product.yaml" {
@@ -175,7 +175,7 @@ func populateResourcesByProduct(gitDir string, product *api.Product, names []str
 		}
 		rName := strings.TrimSuffix(filepath.Base(rf), filepath.Ext(filepath.Base(rf)))
 		if len(names) == 0 || slices.Contains(names, strings.ToLower(rName)) {
-			r := api.NewResource(rf, product, product.TemplateDir, product.OverridesDir)
+			r := ansible.NewResource(rf, product, product.TemplateDir, product.OverridesDir)
 			product.Resources = append(product.Resources, r)
 		}
 	}
