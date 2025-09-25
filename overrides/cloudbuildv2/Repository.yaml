@@ -1,0 +1,17 @@
+---
+examples:
+  - name: 'cloudbuildv2_repository_ghe'
+    primary_resource_id: 'primary'
+    vars:
+      connection_name: 'connection'
+      repository_name: 'repository'
+  - name: 'cloudbuildv2_repository_github'
+    primary_resource_id: 'primary'
+    vars:
+      connection_name: 'connection'
+      repository_name: 'repository'
+  - name: 'cloudbuildv2_repository_gle'
+    primary_resource_id: 'primary'
+    vars:
+      connection_name: 'connection'
+      repository_name: 'repository'
