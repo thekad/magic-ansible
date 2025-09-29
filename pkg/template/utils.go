@@ -5,6 +5,8 @@ package templates
 
 import (
 	"cmp"
+	"encoding/json"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -13,27 +15,43 @@ import (
 
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
+	"github.com/thekad/magic-ansible/pkg/ansible"
 )
 
 func funcMap() gotpl.FuncMap {
-	return gotpl.FuncMap{
-		"eq":             eqFunc,
-		"gt":             gtFunc,
-		"gte":            gteFunc,
-		"indent":         indentFunc,
-		"len":            lenFunc,
-		"lines":          splitLinesFunc,
-		"lt":             ltFunc,
-		"lte":            lteFunc,
-		"ne":             neFunc,
-		"now":            time.Now,
-		"sortProperties": sortPropertiesFunc,
-		"split":          strings.Split,
-		"streq":          strings.EqualFold,
-		"trim":           strings.Trim,
-		"trimSpace":      strings.TrimSpace,
-		"underscore":     google.Underscore,
+	funcMap := gotpl.FuncMap{
+		// Comparison functions
+		"eq":    eqFunc,
+		"gt":    gtFunc,
+		"gte":   gteFunc,
+		"isNil": isNilFunc,
+		"len":   lenFunc,
+		"lt":    ltFunc,
+		"lte":   lteFunc,
+		"ne":    neFunc,
+		// String functions
+		"concat":        concatFunc,
+		"indent":        indentFunc,
+		"lines":         splitLinesFunc,
+		"now":           time.Now,
+		"singular":      singularFunc,
+		"streq":         strings.EqualFold,
+		"trim":          strings.Trim,
+		"trimSpace":     strings.TrimSpace,
+		"resource_name": resourceNameFunc, // this is cheating a bit, but it's useful for templates
+		"tojson":        tojsonFunc,
+		// property functions
+		"sortProperties":   sortPropertiesFunc,
+		"selectProperties": selectPropertiesFunc,
+		// misc functions
+		"list":              listFunc, // for passing arguments to template fragments
+		"classOrType":       classOrTypeFunc,
+		"mmv1TypeToAnsible": ansible.MapMmv1ToAnsible,
 	}
+	// Copy google template functions
+	maps.Copy(funcMap, google.TemplateFunctions)
+
+	return funcMap
 }
 
 func lenFunc(v interface{}) int {
@@ -150,4 +168,85 @@ func indentFunc(spaces int, first bool, text string) string {
 
 	// Join lines back together
 	return strings.Join(indentedLines, "\n")
+}
+
+// listFunc creates a slice from the provided arguments
+// Usage in templates: {{ list "arg1" "arg2" "arg3" }} or {{ list $var1 $var2 }}
+func listFunc(items ...interface{}) []interface{} {
+	return items
+}
+
+// concatFunc concatenates the provided arguments into a single string
+// Usage in templates: {{ concat "arg1" "arg2" "arg3" }} or {{ concat $var1 $var2 }}
+func concatFunc(items ...string) string {
+	return strings.Join(items, "")
+}
+
+// isNilFunc checks if the value is nil
+// Usage in templates: {{ isNil .SomeVariable }}
+func isNilFunc(v interface{}) bool {
+	return v == nil
+}
+
+// singularFunc returns the singular form of the given string
+// Usage in templates: {{ singular "users" }}
+func singularFunc(s string) string {
+	if strings.HasSuffix(s, "s") {
+		return strings.TrimSuffix(s, "s")
+	}
+	return s
+}
+
+// selectPropertiesFunc filters properties based on a string predicate
+// Usage in templates: {{ selectProperties $properties "not output" }} or {{ selectProperties $properties "output" }}
+func selectPropertiesFunc(properties []*api.Type, predicate string) []*api.Type {
+	switch strings.ToLower(strings.TrimSpace(predicate)) {
+	case "output":
+		return google.Select(properties, func(p *api.Type) bool {
+			return p.Output
+		})
+	case "not output", "!output":
+		return google.Select(properties, func(p *api.Type) bool {
+			return !p.Output
+		})
+	case "required":
+		return google.Select(properties, func(p *api.Type) bool {
+			return p.Required
+		})
+	case "not required", "!required", "optional":
+		return google.Select(properties, func(p *api.Type) bool {
+			return !p.Required
+		})
+	default:
+		// If predicate is not recognized, return all properties
+		return properties
+	}
+}
+
+// resourceNameFunc returns a constant string "{{ resource_name }}"
+func resourceNameFunc(resource *api.Resource) string {
+	return "resource_name"
+}
+
+// tojsonFunc returns the JSON representation of the given value
+// Usage in templates: {{ .SomeVariable | tojson }}
+func tojsonFunc(v interface{}) string {
+	json, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(json)
+}
+
+// classOrTypeFunc returns None if the property is nil, class name if it's a nested object, or a python/ansible type otherwise
+// Usage in templates: {{ .Property | classOrType }}
+func classOrTypeFunc(property *api.Type) string {
+	if property == nil {
+		return "None"
+	}
+	if property.IsA("NestedObject") {
+		return google.Camelize(property.Name, "upper")
+	}
+
+	return ansible.MapMmv1ToAnsible(property).String()
 }

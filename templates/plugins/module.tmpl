@@ -10,7 +10,7 @@ __metaclass__ = type
 ANSIBLE_METADATA = {
     "metadata_version": "1.1",
     "status": ["preview"],
-    "supported_by": "community"
+    "supported_by": "community",
 }
 
 DOCUMENTATION = r"""
@@ -43,7 +43,10 @@ def self_link(module):
 {{- end }}
 {{- end }}
 
-    return "{{ $.SelfLinkTpl }}".format(**params)
+    return "{{ $.SelfLinkTpl }}".format(
+        **params
+    )
+
 
 def collection_link(module):
     params = module.params
@@ -53,7 +56,22 @@ def collection_link(module):
 {{- end }}
 {{- end }}
 
-    return "{{ $.CollectionTpl }}".format(**params)
+    return "{{ $.CollectionTpl }}".format(
+        **params
+    )
+
+
+{{ range $key, $properties := $.FlattenedBodyProperties -}}
+{{- if streq $key "" -}}
+{{- continue -}}
+{{- else -}}
+class {{ $.ParentClass }}{{ camelize $key "upper" }}(gcp.Resource):
+    pass
+
+
+{{ end -}}
+{{ end -}}
+
 
 ################################################################################
 # Main
@@ -67,13 +85,59 @@ def main():
         {{ $.ArgumentSpec.ToString | indent 8 false }}
     )
 
+    if not module.params["scopes"]:
+        module.params["scopes"] = {{ $.Scopes | tojson }}
+
+    state = module.params["state"]
+
     changed = False
 
-    module.exit_json(
-        changed=changed,
-        state=module.params["state"],
-        **module.params
-    )
+    request = {
+    {{- range $property :=  selectProperties (index $.FlattenedBodyProperties "") "!output" | sortProperties }}
+        "{{ $property.Name | underscore }}": {{ if streq $property.Type "Array" -}}
+        {{- if streq $property.ItemType.Type "NestedObject" -}}
+            [{{ $.ParentClass }}{{ camelize $property.Name "upper" | singular }}(_).to_request() for _ in module.params.get("{{ $property.Name | underscore }}", [])],
+        {{- else -}}
+            [{{ $property.ItemType | classOrType }}(_) for _ in module.params.get("{{ $property.Name | underscore }}", [])],
+        {{- end -}}
+        {{- else if streq $property.Type "NestedObject" -}}
+            {{ $.ParentClass }}{{ classOrType $property }}(module.params).to_request(),
+        {{- else -}}
+            module.params.get("{{ $property.Name | underscore }}"),
+        {{- end -}}
+    {{- end }}
+    }
+    resource = gcp.Resource(request, "{{ $.ParentName }}", "{{ $.Kind }}")
+
+    obj = resource.fetch(self_link(module))
+
+    if obj:
+        changed = False
+    else:
+        if state == "present":
+            obj = resource.create(collection_link(module))
+            changed = True
+        else:
+            changed = False
+
+    response = {
+    {{- range $property :=  selectProperties (index $.FlattenedBodyProperties "") "output" | sortProperties }}
+        "{{ $property.Name }}": {{ if streq $property.Type "Array" -}}
+        {{- if streq $property.ItemType.Type "NestedObject" -}}
+            [{{ camelize $property.Name "upper" | singular }}(_) for _ in obj.get("{{ $property.Name }}", [])],
+        {{- else -}}
+            [{{ $property.ItemType | classOrType }}(_) for _ in obj.get("{{ $property.Name }}", [])],
+        {{- end -}}
+        {{- else if streq $property.Type "NestedObject" -}}
+            {{ classOrType $property }}(obj),
+        {{- else -}}
+            obj.get("{{ $property.Name }}"),
+        {{- end -}}
+    {{- end }}
+    }
+
+    response.update({"changed": changed})
+    module.exit_json(**response)
 
 
 if __name__ == "__main__":

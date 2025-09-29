@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
+	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -41,40 +42,37 @@ func (t Type) String() string {
 	return string(t)
 }
 
-// mapMmv1ToAnsible maps magic-modules API types to Ansible module types
+// MapMmv1ToAnsible maps magic-modules API types to Ansible module types
 // Returns AnsibleType enum and error for better error handling
-func mapMmv1ToAnsible(property *mmv1api.Type) (Type, error) {
+func MapMmv1ToAnsible(property *mmv1api.Type) Type {
 	if property == nil {
-		return "", fmt.Errorf("property is nil")
-	}
-
-	if property.Type == "" {
-		return TypeStr, fmt.Errorf("property type is empty, defaulting to string")
+		return ""
 	}
 
 	switch property.Type {
 	case "String":
-		return TypeStr, nil
+		return TypeStr
 	case "Integer":
-		return TypeInt, nil
+		return TypeInt
 	case "Boolean":
-		return TypeBool, nil
+		return TypeBool
 	case "NestedObject":
-		return TypeDict, nil
+		return TypeDict
 	case "KeyValueAnnotations":
-		return TypeDict, nil
+		return TypeDict
 	case "KeyValueLabels":
-		return TypeDict, nil
+		return TypeDict
 	case "KeyValuePairs":
-		return TypeDict, nil
+		return TypeDict
 	case "Array":
-		return TypeList, nil
+		return TypeList
 	case "Enum":
-		return TypeStr, nil
+		return TypeStr
 	case "ResourceRef":
-		return TypeDict, nil
+		return TypeDict
 	default:
-		return TypeStr, fmt.Errorf("unknown API type '%s' defaulting to string", property.Type)
+		log.Warn().Msgf("unknown API type '%s' defaulting to string", property.Type)
+		return TypeStr
 	}
 }
 
