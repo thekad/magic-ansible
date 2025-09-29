@@ -2,8 +2,6 @@ module github.com/thekad/magic-ansible
 
 go 1.23.0
 
-toolchain go1.24.3
-
 require (
 	github.com/GoogleCloudPlatform/magic-modules/mmv1 v0.0.0-20250522000036-8ae4f86ec321
 	github.com/go-git/go-git/v5 v5.16.0
