@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -51,6 +53,7 @@ var dontGenerateTests bool
 var overwrite bool
 var gitURL string
 var minVersion string
+var dontFormatFiles bool
 
 func init() {
 	flag.StringVar(&gitURL, "git-url", MMV1_REPO, "git repository to clone")
@@ -64,6 +67,7 @@ func init() {
 	flag.Var(&resources, "resources", "comma-separated list of resources to generate")
 	flag.BoolVar(&dontGenerateCode, "no-code", false, "skip code generation")
 	flag.BoolVar(&dontGenerateTests, "no-tests", false, "skip test generation")
+	flag.BoolVar(&dontFormatFiles, "no-format", false, "skip formatting files (i.e. black/yamlfmt)")
 	flag.BoolVar(&overwrite, "overwrite", false, "overwrite existing files")
 	flag.StringVar(&minVersion, "min-version", MIN_VERSION, "minimum version to generate")
 
@@ -235,7 +239,8 @@ func main() {
 				log.Fatal().Err(err).Msg("failed to unmarshal resource")
 			}
 
-			if r.Mmv1.ProductMetadata.VersionObjOrClosest(r.Mmv1.MinVersion).CompareTo(minVersionObj) != 0 {
+			// check if the resource has a minimum version that is not supported by the product
+			if r.Mmv1.NotInVersion(minVersionObj) {
 				log.Warn().Msgf("resource %s.%s minimum version is %v, but %s is required", r.Parent.Name, r.Name, r.MinVersion(), minVersion)
 				continue
 			}
@@ -256,6 +261,15 @@ func main() {
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to generate code for ansible module")
 			}
+
+			if !dontFormatFiles {
+				filePath := path.Join(templateData.ModuleDirectory, fmt.Sprintf("%s.py", m.Name))
+				log.Info().Msgf("formatting ansible module file: %s", filePath)
+				err := formatCode(filePath, "black")
+				if err != nil {
+					log.Fatal().Err(err).Msg("failed to format code for ansible module")
+				}
+			}
 		}
 		// generate tests for resources
 		if !dontGenerateTests {
@@ -266,4 +280,38 @@ func main() {
 			}
 		}
 	}
+}
+
+func formatCode(filePath string, formatType string) error {
+	log.Debug().Msgf("running %s on file: %s", formatType, filePath)
+	switch formatType {
+	case "black":
+		if blackCmd := which("black"); blackCmd == "" {
+			return fmt.Errorf("black not found in PATH")
+		} else {
+			return runCommand(fmt.Sprintf("%s --quiet --target-version=py38 %s", blackCmd, filePath))
+		}
+	case "yamlfmt":
+		return runCommand(fmt.Sprintf("yamlfmt %s", filePath))
+	}
+	return nil
+}
+
+// which searches for the given executable and returns the full path to it
+// Returns empty string if the command is not found
+func which(name string) string {
+	if path, err := exec.LookPath(name); err == nil {
+		return path
+	}
+
+	return ""
+}
+
+func runCommand(command string) error {
+	log.Debug().Msgf("running command: %s", command)
+	parts := strings.Split(command, " ")
+	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
