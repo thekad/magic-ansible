@@ -3,7 +3,7 @@ module github.com/thekad/magic-ansible
 go 1.23.0
 
 require (
-	github.com/GoogleCloudPlatform/magic-modules/mmv1 v0.0.0-20250522000036-8ae4f86ec321
+	github.com/GoogleCloudPlatform/magic-modules/mmv1 v0.0.0-20250929221853-dee2ac214c35
 	github.com/go-git/go-git/v5 v5.16.0
 	github.com/rs/zerolog v1.34.0
 	gopkg.in/yaml.v3 v3.0.1

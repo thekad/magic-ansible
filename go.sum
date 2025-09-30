@@ -1,7 +1,7 @@
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
 dario.cat/mergo v1.0.2/go.mod h1:E/hbnu0NxMFBjpMIE34DRGLWqDy0g5FuKDhCb31ngxA=
-github.com/GoogleCloudPlatform/magic-modules/mmv1 v0.0.0-20250522000036-8ae4f86ec321 h1:ws69M5ttQRqsLFfa+lFjPdCeORMifNmp6F01OP/oHFQ=
-github.com/GoogleCloudPlatform/magic-modules/mmv1 v0.0.0-20250522000036-8ae4f86ec321/go.mod h1:4/kJo1ePQScQCm4gti7qBMW5k82Aww7IXA/UTvvZfCo=
+github.com/GoogleCloudPlatform/magic-modules/mmv1 v0.0.0-20250929221853-dee2ac214c35 h1:QH5gGSua6EtMhd+eoBYz/LZxQb1lZct9GPKgTaDA1eE=
+github.com/GoogleCloudPlatform/magic-modules/mmv1 v0.0.0-20250929221853-dee2ac214c35/go.mod h1:4/kJo1ePQScQCm4gti7qBMW5k82Aww7IXA/UTvvZfCo=
 github.com/Microsoft/go-winio v0.5.2/go.mod h1:WpS1mjBmmwHBEWmogvA2mj8546UReBk4v8QkMxJ6pZY=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
