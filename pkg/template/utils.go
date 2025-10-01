@@ -34,7 +34,7 @@ func funcMap() gotpl.FuncMap {
 		"indent":        indentFunc,
 		"lines":         splitLinesFunc,
 		"now":           time.Now,
-		"singular":      singularFunc,
+		"singular":      ansible.Singular,
 		"streq":         strings.EqualFold,
 		"trim":          strings.Trim,
 		"trimSpace":     strings.TrimSpace,
@@ -47,6 +47,7 @@ func funcMap() gotpl.FuncMap {
 		"list":              listFunc, // for passing arguments to template fragments
 		"classOrType":       classOrTypeFunc,
 		"mmv1TypeToAnsible": ansible.MapMmv1ToAnsible,
+		"toJinja":           goTplToJinjaFunc,
 	}
 	// Copy google template functions
 	maps.Copy(funcMap, google.TemplateFunctions)
@@ -188,15 +189,6 @@ func isNilFunc(v interface{}) bool {
 	return v == nil
 }
 
-// singularFunc returns the singular form of the given string
-// Usage in templates: {{ singular "users" }}
-func singularFunc(s string) string {
-	if strings.HasSuffix(s, "s") {
-		return strings.TrimSuffix(s, "s")
-	}
-	return s
-}
-
 // selectPropertiesFunc filters properties based on a string predicate
 // Usage in templates: {{ selectProperties $properties "not output" }} or {{ selectProperties $properties "output" }}
 func selectPropertiesFunc(properties []*api.Type, predicate string) []*api.Type {
@@ -249,4 +241,8 @@ func classOrTypeFunc(property *api.Type) string {
 	}
 
 	return ansible.MapMmv1ToAnsible(property).String()
+}
+
+func goTplToJinjaFunc(tpl string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(tpl, "{{", "{"), "}}", "}")
 }

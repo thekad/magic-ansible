@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
 	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
@@ -40,12 +41,16 @@ func NewFromResource(resource *api.Resource) *Module {
 	m.Documentation = NewDocumentationFromOptions(resource, m.Options)
 	log.Info().Msgf("creating argument spec for %s", resource.AnsibleName())
 	m.ArgumentSpec = NewArgSpecFromOptions(m.Options)
+
 	return m
 }
 
 // Option represents a single option in the Ansible module documentation
 // Based on: https://docs.ansible.com/ansible/latest/dev_guide/developing_modules_documenting.html#documentation-block
 type Option struct {
+	// Name is the name of the option
+	Name string `yaml:"name" json:"name"`
+
 	// Description is required - explanation of what this option does
 	// Can be a string or list of strings (each string is one paragraph)
 	Description []string `yaml:"description" json:"description"`
@@ -67,10 +72,22 @@ type Option struct {
 	// Elements is optional - if type='list', specifies the data type of list elements
 	Elements Type `yaml:"elements,omitempty" json:"elements,omitempty"`
 
+	// List of options conflicting with this one
+	Conflicts []string `yaml:"conflicts,omitempty" json:"conflicts,omitempty"`
+
+	// List of options at least one of must be set
+	AtLeastOneOf []string `yaml:"at_least_one_of,omitempty" json:"at_least_one_of,omitempty"`
+
+	// List of options exactly one of must be set
+	ExactlyOneOf []string `yaml:"exactly_one_of,omitempty" json:"exactly_one_of,omitempty"`
+
+	// List of options that must be set together
+	RequiredWith []string `yaml:"required_with,omitempty" json:"required_with,omitempty"`
+
 	// Suboptions is optional - for complex types (dict), defines nested options
 	Suboptions map[string]*Option `yaml:"suboptions,omitempty" json:"suboptions,omitempty"`
 
-	// MutuallyExclusive is optional - list of options that cannot be used together
+	// MutuallyExclusive is optional - list of suboptions that cannot be used together
 	MutuallyExclusive [][]string `yaml:"mutually_exclusive,omitempty" json:"mutually_exclusive,omitempty"`
 
 	// RequiredTogether is optional - list of options that must be used together
@@ -136,11 +153,15 @@ func convertPropertiesToOptions(properties []*mmv1api.Type) map[string]*Option {
 
 		// Create the option
 		option := &Option{
-			Description: parsePropertyDescription(property),
-			Type:        MapMmv1ToAnsible(property),
-			Required:    property.Required,
-			Default:     property.DefaultValue,
-			Choices:     property.EnumValues,
+			Description:  parsePropertyDescription(property),
+			Type:         MapMmv1ToAnsible(property),
+			Required:     property.Required,
+			Default:      property.DefaultValue,
+			Choices:      property.EnumValues,
+			Conflicts:    property.Conflicts,
+			AtLeastOneOf: property.AtLeastOneOf,
+			ExactlyOneOf: property.ExactlyOneOf,
+			RequiredWith: property.RequiredWith,
 		}
 
 		// Handle list element types
@@ -161,7 +182,195 @@ func convertPropertiesToOptions(properties []*mmv1api.Type) map[string]*Option {
 		options[optionName] = option
 	}
 
+	// Analyze dependencies and populate constraint fields for all options
+	analyzeDependencies(options)
+
 	return options
+}
+
+// analyzeDependencies inspects the options and their suboptions to populate dependency fields
+// This function analyzes Conflicts, AtLeastOneOf, ExactlyOneOf, and RequiredWith fields
+// to build the appropriate constraint structures for the options
+func analyzeDependencies(options map[string]*Option) {
+	// Build mutually exclusive groups from Conflicts fields
+	conflictGroups := make(map[string][]string)
+
+	for optionName, option := range options {
+		if len(option.Conflicts) > 0 {
+			// Create a group with this option and all its conflicts
+			group := []string{optionName}
+			group = append(group, option.Conflicts...)
+
+			// Sort for consistent ordering
+			sort.Strings(group)
+
+			// Use the first option name as the key to avoid duplicates
+			groupKey := group[0]
+			if existing, exists := conflictGroups[groupKey]; exists {
+				// Merge with existing group and deduplicate
+				merged := mergeAndDeduplicate(existing, group)
+				conflictGroups[groupKey] = merged
+			} else {
+				conflictGroups[groupKey] = group
+			}
+		}
+	}
+
+	// Convert conflict groups to mutually exclusive constraints
+	for _, group := range conflictGroups {
+		if len(group) > 1 {
+			// Find all options in this group and add the constraint to each
+			for _, optionName := range group {
+				if option, exists := options[optionName]; exists {
+					option.MutuallyExclusive = append(option.MutuallyExclusive, group)
+				}
+			}
+		}
+	}
+
+	// Build required_together groups from RequiredWith fields
+	requiredGroups := make(map[string][]string)
+
+	for optionName, option := range options {
+		if len(option.RequiredWith) > 0 {
+			// Create a group with this option and all required options
+			group := []string{optionName}
+			group = append(group, option.RequiredWith...)
+
+			// Sort for consistent ordering
+			sort.Strings(group)
+
+			// Use the first option name as the key to avoid duplicates
+			groupKey := group[0]
+			if existing, exists := requiredGroups[groupKey]; exists {
+				// Merge with existing group and deduplicate
+				merged := mergeAndDeduplicate(existing, group)
+				requiredGroups[groupKey] = merged
+			} else {
+				requiredGroups[groupKey] = group
+			}
+		}
+	}
+
+	// Convert required groups to required_together constraints
+	for _, group := range requiredGroups {
+		if len(group) > 1 {
+			// Find all options in this group and add the constraint to each
+			for _, optionName := range group {
+				if option, exists := options[optionName]; exists {
+					option.RequiredTogether = append(option.RequiredTogether, group)
+				}
+			}
+		}
+	}
+
+	// Build required_one_of groups from AtLeastOneOf fields
+	oneOfGroups := make(map[string][]string)
+
+	for optionName, option := range options {
+		if len(option.AtLeastOneOf) > 0 {
+			// Create a group with this option and all at-least-one-of options
+			group := []string{optionName}
+			group = append(group, option.AtLeastOneOf...)
+
+			// Sort for consistent ordering
+			sort.Strings(group)
+
+			// Use the first option name as the key to avoid duplicates
+			groupKey := group[0]
+			if existing, exists := oneOfGroups[groupKey]; exists {
+				// Merge with existing group and deduplicate
+				merged := mergeAndDeduplicate(existing, group)
+				oneOfGroups[groupKey] = merged
+			} else {
+				oneOfGroups[groupKey] = group
+			}
+		}
+	}
+
+	// Convert one-of groups to required_one_of constraints
+	for _, group := range oneOfGroups {
+		if len(group) > 1 {
+			// Find all options in this group and add the constraint to each
+			for _, optionName := range group {
+				if option, exists := options[optionName]; exists {
+					option.RequiredOneOf = append(option.RequiredOneOf, group)
+				}
+			}
+		}
+	}
+
+	// Handle ExactlyOneOf by adding to both mutually_exclusive and required_one_of
+	exactlyOneGroups := make(map[string][]string)
+
+	for optionName, option := range options {
+		if len(option.ExactlyOneOf) > 0 {
+			// Create a group with this option and all exactly-one-of options
+			group := []string{optionName}
+			group = append(group, option.ExactlyOneOf...)
+
+			// Sort for consistent ordering
+			sort.Strings(group)
+
+			// Use the first option name as the key to avoid duplicates
+			groupKey := group[0]
+			if existing, exists := exactlyOneGroups[groupKey]; exists {
+				// Merge with existing group and deduplicate
+				merged := mergeAndDeduplicate(existing, group)
+				exactlyOneGroups[groupKey] = merged
+			} else {
+				exactlyOneGroups[groupKey] = group
+			}
+		}
+	}
+
+	// ExactlyOneOf means both "at least one" and "at most one"
+	for _, group := range exactlyOneGroups {
+		if len(group) > 1 {
+			// Find all options in this group and add both constraints to each
+			for _, optionName := range group {
+				if option, exists := options[optionName]; exists {
+					// Add to required_one_of (at least one must be specified)
+					option.RequiredOneOf = append(option.RequiredOneOf, group)
+					// Add to mutually_exclusive (at most one can be specified)
+					option.MutuallyExclusive = append(option.MutuallyExclusive, group)
+				}
+			}
+		}
+	}
+
+	// Recursively analyze suboptions for each option
+	for _, option := range options {
+		if len(option.Suboptions) > 0 {
+			analyzeDependencies(option.Suboptions)
+		}
+	}
+}
+
+// mergeAndDeduplicate merges two string slices and removes duplicates
+func mergeAndDeduplicate(slice1, slice2 []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(slice1)+len(slice2))
+
+	// Add items from first slice
+	for _, item := range slice1 {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+
+	// Add items from second slice
+	for _, item := range slice2 {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+
+	// Sort for consistent ordering
+	sort.Strings(result)
+	return result
 }
 
 // CustomCode returns the custom code (if any) defined in the API Resource YAML file
@@ -205,22 +414,12 @@ func (m *Module) AllUserProperties() []*mmv1api.Type {
 	return sortProperties(m.Resource.Mmv1.AllUserProperties())
 }
 
-func (m *Module) SelfLinkTpl() string {
-	tpl := strings.ReplaceAll(strings.ReplaceAll(m.Resource.Mmv1.SelfLink, "{{", "{"), "}}", "}")
-	return fmt.Sprintf("%s%s", m.BaseUrl(), tpl)
-}
-
-func (m *Module) CollectionTpl() string {
-	tpl := strings.ReplaceAll(strings.ReplaceAll(m.Resource.Mmv1.CollectionUrl(), "{{", "{"), "}}", "}")
-	return fmt.Sprintf("%s%s", m.BaseUrl(), tpl)
-}
-
 func (m *Module) ParentName() string {
 	return strings.ToLower(m.Resource.Parent.Name)
 }
 
 func (m *Module) ParentClass() string {
-	return google.Camelize(m.Resource.Parent.Name, "upper")
+	return google.Camelize(m.Resource.Parent.Mmv1.Name, "upper")
 }
 
 func (m *Module) Kind() string {
@@ -259,12 +458,7 @@ func (m *Module) flattenNestedObjects(properties []*mmv1api.Type, parentPath str
 
 		if property.Type == "NestedObject" && property.Properties != nil {
 			// Build the flattened path name
-			var pathName string
-			if parentPath == "" {
-				pathName = google.Camelize(property.Name, "upper")
-			} else {
-				pathName = google.Camelize(parentPath, "upper") + google.Camelize(property.Name, "upper")
-			}
+			pathName := parentPath + google.Camelize(property.Name, "upper")
 
 			// Collect non-NestedObject properties from this nested object
 			var nonNestedProps []*mmv1api.Type
