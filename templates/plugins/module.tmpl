@@ -43,7 +43,46 @@ def self_link(module):
 {{- end }}
 {{- end }}
 
-    return "{{ $.SelfLinkTpl }}".format(
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.SelfLinkUri | toJinja }}".format(
+        **params
+    )
+
+
+def create_link(module):
+    params = module.params
+{{- range $.UrlParamOnlyProperties }}
+{{- if streq .Type "ResourceRef" }}
+    params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
+{{- end }}
+{{- end }}
+
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.CreateUri | toJinja }}".format(
+        **params
+    )
+
+
+def update_link(module):
+    params = module.params
+{{- range $.UrlParamOnlyProperties }}
+{{- if streq .Type "ResourceRef" }}
+    params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
+{{- end }}
+{{- end }}
+
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.UpdateUri | toJinja }}".format(
+        **params
+    )
+
+
+def delete_link(module):
+    params = module.params
+{{- range $.UrlParamOnlyProperties }}
+{{- if streq .Type "ResourceRef" }}
+    params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
+{{- end }}
+{{- end }}
+
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.DeleteUri | toJinja }}".format(
         **params
     )
 
@@ -56,23 +95,53 @@ def collection_link(module):
 {{- end }}
 {{- end }}
 
-    return "{{ $.CollectionTpl }}".format(
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.CollectionUrl | toJinja }}".format(
         **params
     )
 
 
-{{ range $key, $properties := $.FlattenedBodyProperties -}}
-{{- if streq $key "" -}}
-{{- continue -}}
-{{- else -}}
+{{ range $key, $properties := $.FlattenedBodyProperties }}
+{{- $responseProperties := selectProperties $properties "output" -}}
+{{- $requestProperties := selectProperties $properties "!output" -}}
 class {{ $.ParentClass }}{{ camelize $key "upper" }}(gcp.Resource):
-    pass
-
+{{- if $requestProperties | len | gt 0 }}
+    def _request(self):
+        return {
+        {{- range $property := $requestProperties | sortProperties }}
+            "{{ $property.Name }}": {{ if streq $property.Type "Array" -}}
+            {{- if streq $property.ItemType.Type "NestedObject" -}}
+                [{{ $.ParentClass }}{{ camelize $property.Name "upper" | singular }}(_).to_request() for _ in self.params.get("{{ $property.Name | underscore }}", [])],
+            {{- else -}}
+                [{{ $property.ItemType | classOrType }}(_) for _ in self.params.get("{{ $property.Name | underscore }}", [])],
+            {{- end -}}
+            {{- else if streq $property.Type "NestedObject" -}}
+                {{ $.ParentClass }}{{ classOrType $property }}(self.params.get("{{ $property.Name | underscore }}", {})).to_request(),
+            {{- else -}}
+                self.params.get("{{ $property.Name | underscore }}"),
+            {{- end -}}
+        {{- end }}
+        }
+{{ end }}
+{{- if $responseProperties | len | gt 0 }}
+    def _response(self, response):
+        return {
+        {{- range $property := $responseProperties | sortProperties }}
+            "{{ $property.Name }}": {{ if streq $property.Type "Array" -}}
+            {{- if streq $property.ItemType.Type "NestedObject" -}}
+                [{{ $.ParentClass }}{{ camelize $property.Name "upper" | singular }}(_).from_response() for _ in response.get("{{ $property.Name }}", [])],
+            {{- else -}}
+                [{{ $property.ItemType | classOrType }}(_) for _ in response.get("{{ $property.Name }}", [])],
+            {{- end -}}
+            {{- else if streq $property.Type "NestedObject" -}}
+                {{ $.ParentClass }}{{ classOrType $property }}(response).from_response(),
+            {{- else -}}
+                response.get("{{ $property.Name }}"),
+            {{- end -}}
+        {{- end }}
+        }
+{{ end }}
 
 {{ end -}}
-{{ end -}}
-
-
 ################################################################################
 # Main
 ################################################################################
@@ -92,52 +161,23 @@ def main():
 
     changed = False
 
-    request = {
-    {{- range $property :=  selectProperties (index $.FlattenedBodyProperties "") "!output" | sortProperties }}
-        "{{ $property.Name | underscore }}": {{ if streq $property.Type "Array" -}}
-        {{- if streq $property.ItemType.Type "NestedObject" -}}
-            [{{ $.ParentClass }}{{ camelize $property.Name "upper" | singular }}(_).to_request() for _ in module.params.get("{{ $property.Name | underscore }}", [])],
-        {{- else -}}
-            [{{ $property.ItemType | classOrType }}(_) for _ in module.params.get("{{ $property.Name | underscore }}", [])],
-        {{- end -}}
-        {{- else if streq $property.Type "NestedObject" -}}
-            {{ $.ParentClass }}{{ classOrType $property }}(module.params).to_request(),
-        {{- else -}}
-            module.params.get("{{ $property.Name | underscore }}"),
-        {{- end -}}
-    {{- end }}
-    }
-    resource = gcp.Resource(request, "{{ $.ParentName }}", "{{ $.Kind }}")
+    params = gcp.remove_nones_from_dict(module.params)
 
-    obj = resource.fetch(self_link(module))
+    resource = {{ $.ParentClass }}(params, module=module, product="{{ $.ParentName }}", kind="{{ $.Kind }}")
 
-    if obj:
-        changed = False
-    else:
+    obj = resource.fetch(self_link(module), allow_not_found=True)
+
+    if obj is None:
         if state == "present":
-            obj = resource.create(collection_link(module))
+            obj = resource.create(create_link(module))
             changed = True
         else:
             changed = False
+    else:
+        pass
 
-    response = {
-    {{- range $property :=  selectProperties (index $.FlattenedBodyProperties "") "output" | sortProperties }}
-        "{{ $property.Name }}": {{ if streq $property.Type "Array" -}}
-        {{- if streq $property.ItemType.Type "NestedObject" -}}
-            [{{ camelize $property.Name "upper" | singular }}(_) for _ in obj.get("{{ $property.Name }}", [])],
-        {{- else -}}
-            [{{ $property.ItemType | classOrType }}(_) for _ in obj.get("{{ $property.Name }}", [])],
-        {{- end -}}
-        {{- else if streq $property.Type "NestedObject" -}}
-            {{ classOrType $property }}(obj),
-        {{- else -}}
-            obj.get("{{ $property.Name }}"),
-        {{- end -}}
-    {{- end }}
-    }
-
-    response.update({"changed": changed})
-    module.exit_json(**response)
+    obj.update({"changed": changed})
+    module.exit_json(**obj)
 
 
 if __name__ == "__main__":
