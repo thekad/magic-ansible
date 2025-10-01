@@ -1,0 +1,13 @@
+examples:
+  - name: 'alloydb_cluster_before_upgrade'
+    _drop: true
+  - name: 'alloydb_cluster_after_upgrade'
+    _drop: true
+  - name: 'alloydb_cluster_full'
+    _drop: true
+  - name: 'alloydb_cluster_restore'
+    _drop: true
+  - name: 'alloydb_secondary_cluster_basic'
+    _drop: true
+  - name: 'alloydb_secondary_cluster_basic_test'
+    _drop: true
