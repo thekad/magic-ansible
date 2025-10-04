@@ -4,18 +4,16 @@
 package templates
 
 import (
-	"cmp"
 	"encoding/json"
 	"maps"
 	"reflect"
-	"slices"
+	"sort"
 	"strings"
 	gotpl "text/template"
 	"time"
 
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
-	"github.com/thekad/magic-ansible/pkg/ansible"
 )
 
 func funcMap() gotpl.FuncMap {
@@ -34,20 +32,16 @@ func funcMap() gotpl.FuncMap {
 		"indent":        indentFunc,
 		"lines":         splitLinesFunc,
 		"now":           time.Now,
-		"singular":      ansible.Singular,
-		"streq":         strings.EqualFold,
+		"singular":      singularFunc,
+		"strEq":         strings.EqualFold,
 		"trim":          strings.Trim,
 		"trimSpace":     strings.TrimSpace,
 		"resource_name": resourceNameFunc, // this is cheating a bit, but it's useful for templates
-		"tojson":        tojsonFunc,
-		// property functions
-		"sortProperties":   sortPropertiesFunc,
-		"selectProperties": selectPropertiesFunc,
+		"toJson":        tojsonFunc,
+		"toPythonTpl":   toPythonTpl,
 		// misc functions
-		"list":              listFunc, // for passing arguments to template fragments
-		"classOrType":       classOrTypeFunc,
-		"mmv1TypeToAnsible": ansible.MapMmv1ToAnsible,
-		"toJinja":           goTplToJinjaFunc,
+		"list":       listFunc, // for passing arguments to template fragments
+		"sortedKeys": sortedKeysFunc,
 	}
 	// Copy google template functions
 	maps.Copy(funcMap, google.TemplateFunctions)
@@ -77,13 +71,6 @@ func splitLinesFunc(s string) []string {
 		lines = append(lines, strings.TrimSpace(line))
 	}
 	return lines
-}
-
-func sortPropertiesFunc(props []*api.Type) []*api.Type {
-	slices.SortFunc(props, func(a, b *api.Type) int {
-		return cmp.Compare(a.Name, b.Name)
-	})
-	return props
 }
 
 // Comparison functions for templates
@@ -189,32 +176,6 @@ func isNilFunc(v interface{}) bool {
 	return v == nil
 }
 
-// selectPropertiesFunc filters properties based on a string predicate
-// Usage in templates: {{ selectProperties $properties "not output" }} or {{ selectProperties $properties "output" }}
-func selectPropertiesFunc(properties []*api.Type, predicate string) []*api.Type {
-	switch strings.ToLower(strings.TrimSpace(predicate)) {
-	case "output":
-		return google.Select(properties, func(p *api.Type) bool {
-			return p.Output
-		})
-	case "not output", "!output":
-		return google.Select(properties, func(p *api.Type) bool {
-			return !p.Output
-		})
-	case "required":
-		return google.Select(properties, func(p *api.Type) bool {
-			return p.Required
-		})
-	case "not required", "!required", "optional":
-		return google.Select(properties, func(p *api.Type) bool {
-			return !p.Required
-		})
-	default:
-		// If predicate is not recognized, return all properties
-		return properties
-	}
-}
-
 // resourceNameFunc returns a constant string "{{ resource_name }}"
 func resourceNameFunc(resource *api.Resource) string {
 	return "resource_name"
@@ -230,19 +191,30 @@ func tojsonFunc(v interface{}) string {
 	return string(json)
 }
 
-// classOrTypeFunc returns None if the property is nil, class name if it's a nested object, or a python/ansible type otherwise
-// Usage in templates: {{ .Property | classOrType }}
-func classOrTypeFunc(property *api.Type) string {
-	if property == nil {
-		return "None"
-	}
-	if property.IsA("NestedObject") {
-		return google.Camelize(property.Name, "upper")
-	}
-
-	return ansible.MapMmv1ToAnsible(property).String()
+func toPythonTpl(tpl string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(tpl, "{{", "{"), "}}", "}")
 }
 
-func goTplToJinjaFunc(tpl string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(tpl, "{{", "{"), "}}", "}")
+func singularFunc(s string) string {
+	return strings.TrimSuffix(s, "s")
+}
+
+// sortedKeysFunc returns the keys of a map in alphabetical order
+func sortedKeysFunc(m interface{}) []string {
+	if m == nil {
+		return nil
+	}
+
+	rv := reflect.ValueOf(m)
+	if rv.Kind() != reflect.Map {
+		return nil
+	}
+
+	keys := make([]string, 0, rv.Len())
+	for _, key := range rv.MapKeys() {
+		keys = append(keys, key.String())
+	}
+
+	sort.Strings(keys)
+	return keys
 }
