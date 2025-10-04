@@ -1,7 +1,7 @@
 {{ template "autogen_notice" . }}
 
 cloud/gcp
-cloud/gcp/{{ $.ParentName }}
-{{- if streq $.Resource.MinVersion "beta" }}
+cloud/gcp/{{ $.ProductName | underscore}}
+{{- if strEq $.Resource.MinVersion "beta" }}
 unsupported
 {{- end }}
