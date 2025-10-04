@@ -28,7 +28,6 @@ RETURN = r"""
 ################################################################################
 
 from ansible_collections.google.cloud.plugins.module_utils import gcp_utils as gcp
-import json
 {{ if $.CustomCode.CustomImport | trimSpace | len | gt 0 -}}
 # BEGIN Custom imports
 {{ $.CustomCode.CustomImport | trimSpace }}
@@ -38,12 +37,12 @@ import json
 def self_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
-{{- if streq .Type "ResourceRef" }}
+{{- if strEq .Type "ResourceRef" }}
     params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
 {{- end }}
 {{- end }}
 
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.SelfLinkUri | toJinja }}".format(
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.SelfLinkUri | toPythonTpl }}".format(
         **params
     )
 
@@ -51,12 +50,12 @@ def self_link(module):
 def create_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
-{{- if streq .Type "ResourceRef" }}
+{{- if strEq .Type "ResourceRef" }}
     params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
 {{- end }}
 {{- end }}
 
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.CreateUri | toJinja }}".format(
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.CreateUri | toPythonTpl }}".format(
         **params
     )
 
@@ -64,12 +63,12 @@ def create_link(module):
 def update_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
-{{- if streq .Type "ResourceRef" }}
+{{- if strEq .Type "ResourceRef" }}
     params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
 {{- end }}
 {{- end }}
 
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.UpdateUri | toJinja }}".format(
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.UpdateUri | toPythonTpl }}".format(
         **params
     )
 
@@ -77,12 +76,12 @@ def update_link(module):
 def delete_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
-{{- if streq .Type "ResourceRef" }}
+{{- if strEq .Type "ResourceRef" }}
     params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
 {{- end }}
 {{- end }}
 
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.DeleteUri | toJinja }}".format(
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.DeleteUri | toPythonTpl }}".format(
         **params
     )
 
@@ -90,58 +89,90 @@ def delete_link(module):
 def collection_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
-{{- if streq .Type "ResourceRef" }}
+{{- if strEq .Type "ResourceRef" }}
     params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
 {{- end }}
 {{- end }}
 
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.CollectionUrl | toJinja }}".format(
+    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.CollectionUrl | toPythonTpl }}".format(
         **params
     )
 
-
-{{ range $key, $properties := $.FlattenedBodyProperties }}
-{{- $responseProperties := selectProperties $properties "output" -}}
-{{- $requestProperties := selectProperties $properties "!output" -}}
-class {{ $.ParentClass }}{{ camelize $key "upper" }}(gcp.Resource):
-{{- if $requestProperties | len | gt 0 }}
+{{ range $option := $.AllNestedOptions -}}
+class {{ $option.ClassName }}(gcp.Resource):
+{{- if $option.InputSuboptions | len | gt 0 }}
     def _request(self):
         return {
-        {{- range $property := $requestProperties | sortProperties }}
-            "{{ $property.Name }}": {{ if streq $property.Type "Array" -}}
-            {{- if streq $property.ItemType.Type "NestedObject" -}}
-                [{{ $.ParentClass }}{{ camelize $property.Name "upper" | singular }}(_).to_request() for _ in self.params.get("{{ $property.Name | underscore }}", [])],
-            {{- else -}}
-                [{{ $property.ItemType | classOrType }}(_) for _ in self.params.get("{{ $property.Name | underscore }}", [])],
-            {{- end -}}
-            {{- else if streq $property.Type "NestedObject" -}}
-                {{ $.ParentClass }}{{ classOrType $property }}(self.params.get("{{ $property.Name | underscore }}", {})).to_request(),
-            {{- else -}}
-                self.params.get("{{ $property.Name | underscore }}"),
-            {{- end -}}
+    {{- range $suboption := $option.InputSuboptions }}
+            "{{ $suboption.Name }}": {{""}}
+        {{- if $suboption.IsNestedObject -}}
+            {{ $suboption.ClassName }}(self.params.get("{{ $suboption.AnsibleName }}", {})).to_request(),
+        {{- else if $suboption.IsNestedList -}}
+            [{{ $suboption.ClassName }}(item).to_request() for item in self.params.get("{{ $suboption.AnsibleName }}", [])],
+        {{- else -}}
+            self.params.get("{{ $suboption.AnsibleName }}"),
+        {{- end }}
         {{- end }}
         }
-{{ end }}
-{{- if $responseProperties | len | gt 0 }}
-    def _response(self, response):
+    {{- end }}
+
+{{- if $option.OutputSuboptions | len | gt 0 }}
+    def _response(self):
         return {
-        {{- range $property := $responseProperties | sortProperties }}
-            "{{ $property.Name }}": {{ if streq $property.Type "Array" -}}
-            {{- if streq $property.ItemType.Type "NestedObject" -}}
-                [{{ $.ParentClass }}{{ camelize $property.Name "upper" | singular }}(_).from_response() for _ in response.get("{{ $property.Name }}", [])],
-            {{- else -}}
-                [{{ $property.ItemType | classOrType }}(_) for _ in response.get("{{ $property.Name }}", [])],
-            {{- end -}}
-            {{- else if streq $property.Type "NestedObject" -}}
-                {{ $.ParentClass }}{{ classOrType $property }}(response).from_response(),
-            {{- else -}}
-                response.get("{{ $property.Name }}"),
-            {{- end -}}
+    {{- range $suboption := $option.OutputSuboptions }}
+            "{{ $suboption.Name }}": {{""}}
+        {{- if $suboption.IsNestedObject -}}
+            {{ $suboption.ClassName }}(self.params.get("{{ $suboption.AnsibleName }}", {})).from_response(),
+        {{- else if $suboption.IsNestedList -}}
+            [{{ $suboption.ClassName }}(item).from_response() for item in self.params.get("{{ $suboption.AnsibleName }}", [])],
+        {{- else -}}
+            self.params.get("{{ $suboption.AnsibleName }}"),
+        {{- end }}
         {{- end }}
         }
-{{ end }}
+    {{- end }}
+
 
 {{ end -}}
+class {{ $.ModuleClass }}(gcp.Resource):
+    def _request(self):
+        return {
+{{- range $option := $.InputOptions }}
+            "{{ $option.Name }}": {{ if $option.IsNestedObject -}}
+            {{ $option.ClassName }}(self.params.get("{{ $option.AnsibleName }}", {})).to_request(),
+            {{- else if $option.IsList -}}
+            [
+                {{- if $option.ElementsAre "NestedObject"  -}}
+                {{ $option.ClassName }}(self.params.get("{{ $option.AnsibleName }}", {})).to_request(),
+                {{- else -}}
+                self.params.get("{{ $option.AnsibleName }}"),
+                {{- end }}
+            ],
+            {{- else -}}
+            self.params.get("{{ $option.AnsibleName }}"),
+            {{- end -}}
+{{- end }}
+        }
+
+    def _response(self):
+        return {
+{{- range $option := $.OutputOptions }}
+            "{{ $option.Name }}": {{ if $option.IsNestedObject -}}
+            {{ $option.ClassName }}(self.params.get("{{ $option.Name }}", {})).from_response(),
+            {{- else if $option.IsList -}}
+            [
+                {{- if $option.ElementsAre "NestedObject"  -}}
+                {{ $option.ClassName }}(self.params.get("{{ $option.Name }}", {})).from_response(),
+                {{- else -}}
+                self.params.get("{{ $option.Name }}"),
+                {{- end }}
+            ],
+            {{- else -}}
+            self.params.get("{{ $option.Name }}"),
+            {{- end }}
+{{- end }}
+        }
+
 ################################################################################
 # Main
 ################################################################################
@@ -155,7 +186,7 @@ def main():
     )
 
     if not module.params["scopes"]:
-        module.params["scopes"] = {{ $.Scopes | tojson }}
+        module.params["scopes"] = {{ $.Scopes | toJson }}
 
     state = module.params["state"]
 
@@ -163,18 +194,30 @@ def main():
 
     params = gcp.remove_nones_from_dict(module.params)
 
-    resource = {{ $.ParentClass }}(params, module=module, product="{{ $.ParentName }}", kind="{{ $.Kind }}")
+    req = {{ $.ModuleClass }}(params, module=module, product="{{ $.ProductName }}", kind="{{ $.Kind }}")
 
-    obj = resource.fetch(self_link(module), allow_not_found=True)
+    obj = req.fetch(self_link(module), allow_not_found=True)
+
+    async_op = {{ $.Async.Actions | toJson }}
 
     if obj is None:
         if state == "present":
-            obj = resource.create(create_link(module))
+            if "create" in async_op:
+                obj = req.create_async(create_link(module), async_link_template="{{ $.BaseUrl }}{{ $.Async.Operation.BaseUrl | toPythonTpl }}")
+            else:
+                obj = resource.create(create_link(module))
             changed = True
         else:
             changed = False
     else:
         pass
+
+    try:
+        rsp = {{ $.ModuleClass }}(obj, module=module, product="{{ $.ProductName }}", kind="{{ $.Kind }}")
+        obj = rsp.from_response()
+    except Exception as e:
+        gcp._trace(exc=e)
+        module.fail_json(msg=str(e))
 
     obj.update({"changed": changed})
     module.exit_json(**obj)
