@@ -12,12 +12,12 @@ import (
 )
 
 type ExampleBlock struct {
-	Examples []mmv1resource.Examples `yaml:"examples" json:"examples"`
+	Examples []mmv1resource.Examples
 }
 
-func NewExampleBlockFromMmv1(resource *mmv1api.Resource) *ExampleBlock {
+func NewExampleBlockFromMmv1(mmv1 *mmv1api.Resource) *ExampleBlock {
 	return &ExampleBlock{
-		Examples: resource.Examples,
+		Examples: mmv1.Examples,
 	}
 }
 
