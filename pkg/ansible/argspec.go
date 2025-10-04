@@ -7,207 +7,139 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
+	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
 )
 
 // ArgumentSpec represents the argument specification for an Ansible module
 // Based on: https://docs.ansible.com/ansible/latest/dev_guide/developing_program_flow_modules.html#argument-spec
 type ArgumentSpec struct {
 	// Arguments is the main argument specification dictionary
-	Arguments map[string]*ArgumentOption `json:"arguments"`
+	Arguments map[string]*ArgumentOption
 
 	// MutuallyExclusive lists groups of arguments that cannot be used together
-	MutuallyExclusive [][]string `json:"mutually_exclusive,omitempty"`
+	MutuallyExclusive [][]string
 
 	// RequiredTogether lists groups of arguments that must be used together
-	RequiredTogether [][]string `json:"required_together,omitempty"`
+	RequiredTogether [][]string
 
 	// RequiredOneOf lists groups where at least one argument must be specified
-	RequiredOneOf [][]string `json:"required_one_of,omitempty"`
-
-	// RequiredIf lists conditional requirements
-	RequiredIf [][]interface{} `json:"required_if,omitempty"`
-
-	// RequiredBy maps arguments to other arguments they require
-	RequiredBy map[string][]string `json:"required_by,omitempty"`
+	RequiredOneOf [][]string
 }
 
 // ArgumentOption represents a single argument in the argument spec
 type ArgumentOption struct {
 	// Type specifies the expected data type
-	Type string `json:"type,omitempty"`
+	Type string
 
 	// Required indicates if this argument is mandatory
-	Required bool `json:"required,omitempty"`
+	Required bool
 
 	// Default provides the default value
-	Default interface{} `json:"default,omitempty"`
+	Default interface{}
 
 	// Choices lists valid values for the argument
-	Choices []string `json:"choices,omitempty"`
+	Choices []string
 
 	// Elements specifies the type of list elements (when type="list")
-	Elements string `json:"elements,omitempty"`
+	Elements string
 
 	// Options defines nested arguments (when type="dict")
-	Options map[string]*ArgumentOption `json:"options,omitempty"`
+	Options map[string]*ArgumentOption
 
 	// NoLog indicates sensitive data that should not be logged
-	NoLog bool `json:"no_log,omitempty"`
-
-	// Aliases provides alternative names for this argument
-	Aliases []string `json:"aliases,omitempty"`
-
-	// Deprecated marks this argument as deprecated
-	Deprecated map[string]interface{} `json:"deprecated,omitempty"`
+	NoLog bool
 
 	// MutuallyExclusive for nested options
-	MutuallyExclusive [][]string `json:"mutually_exclusive,omitempty"`
+	MutuallyExclusive [][]string
 
 	// RequiredTogether for nested options
-	RequiredTogether [][]string `json:"required_together,omitempty"`
+	RequiredTogether [][]string
 
 	// RequiredOneOf for nested options
-	RequiredOneOf [][]string `json:"required_one_of,omitempty"`
-
-	// RequiredIf for nested options
-	RequiredIf [][]interface{} `json:"required_if,omitempty"`
-
-	// RequiredBy for nested options
-	RequiredBy map[string][]string `json:"required_by,omitempty"`
+	RequiredOneOf [][]string
 }
 
-// NewArgSpecFromOptions creates an ArgumentSpec from existing Ansible options
-// This constructor converts the already-parsed Ansible module options to
-// argument specification format suitable for Python argument spec generation
-func NewArgSpecFromOptions(options map[string]*Option) *ArgumentSpec {
-	if options == nil {
-		return &ArgumentSpec{
-			Arguments: make(map[string]*ArgumentOption),
-		}
-	}
-
+// NewArgSpecFromMmv1 creates an ArgumentSpec directly from an MMv1 resource
+// This constructor converts MMv1 resource properties to argument specification format
+// suitable for Python argument spec generation
+func NewArgSpecFromMmv1(resource *mmv1api.Resource) *ArgumentSpec {
 	argSpec := &ArgumentSpec{
 		Arguments: make(map[string]*ArgumentOption),
 	}
 
-	// Convert each option to an argument option
-	for optionName, option := range options {
-		argOption := &ArgumentOption{
-			Type:    option.Type.String(),
-			Default: option.Default,
-			Choices: option.Choices,
-		}
+	if resource == nil {
+		return argSpec
+	}
 
-		if option.Required && option.Default == nil {
-			argOption.Required = true
-		}
+	// Always add the standard 'state' option for GCP resources
+	argSpec.Arguments["state"] = &ArgumentOption{
+		Type:    "str",
+		Default: "present",
+		Choices: []string{"present", "absent"},
+	}
 
-		// Convert elements type
-		if option.Elements != "" {
-			argOption.Elements = option.Elements.String()
-		}
+	// Process all user properties from the API Resource
+	convertedArgOptions := convertMmv1PropertiesToArgOptions(google.Reject(resource.AllUserProperties(), func(p *mmv1api.Type) bool {
+		return p.Output
+	}))
 
-		// Convert suboptions recursively
-		if len(option.Suboptions) > 0 {
-			argOption.Options = convertSuboptionsToArgOptions(option.Suboptions)
-		}
-
-		// Copy constraint fields from option to argument option
-		if len(option.MutuallyExclusive) > 0 {
-			argOption.MutuallyExclusive = option.MutuallyExclusive
-		}
-		if len(option.RequiredTogether) > 0 {
-			argOption.RequiredTogether = option.RequiredTogether
-		}
-		if len(option.RequiredOneOf) > 0 {
-			argOption.RequiredOneOf = option.RequiredOneOf
-		}
-		if len(option.RequiredIf) > 0 {
-			argOption.RequiredIf = option.RequiredIf
-		}
-		if len(option.RequiredBy) > 0 {
-			argOption.RequiredBy = option.RequiredBy
-		}
-
-		// Set no_log for sensitive fields (basic heuristic)
-		if isSensitiveField(optionName) {
-			argOption.NoLog = true
-		}
-
-		argSpec.Arguments[optionName] = argOption
+	// Merge the converted options with the state option
+	for name, argOption := range convertedArgOptions {
+		argSpec.Arguments[name] = argOption
 	}
 
 	return argSpec
 }
 
-// convertSuboptionsToArgOptions recursively converts Ansible suboptions to argument options
-func convertSuboptionsToArgOptions(suboptions map[string]*Option) map[string]*ArgumentOption {
-	if suboptions == nil {
+// convertMmv1PropertiesToArgOptions converts MMv1 properties directly to ArgumentOptions
+func convertMmv1PropertiesToArgOptions(properties []*mmv1api.Type) map[string]*ArgumentOption {
+	if properties == nil {
 		return nil
 	}
 
 	argOptions := make(map[string]*ArgumentOption)
 
-	for suboptionName, suboption := range suboptions {
+	for _, property := range properties {
+		// Convert property name to Ansible-style underscore format
+		argOptionName := google.Underscore(property.Name)
+
+		// Create the argument option
 		argOption := &ArgumentOption{
-			Type:     suboption.Type.String(),
-			Required: suboption.Required,
-			Default:  suboption.Default,
-			Choices:  suboption.Choices,
+			Type:    MapMmv1ToAnsible(property).String(),
+			Default: property.DefaultValue,
+			Choices: property.EnumValues,
 		}
 
-		// Convert elements type
-		if suboption.Elements != "" {
-			argOption.Elements = suboption.Elements.String()
+		if property.Required && property.DefaultValue == nil {
+			argOption.Required = true
 		}
 
-		// Convert nested suboptions recursively
-		if len(suboption.Suboptions) > 0 {
-			argOption.Options = convertSuboptionsToArgOptions(suboption.Suboptions)
+		// Handle list element types
+		if argOption.Type == "list" && property.ItemType != nil {
+			argOption.Elements = MapMmv1ToAnsible(property.ItemType).String()
+
+			// If the list contains nested objects, create suboptions for the element type
+			if property.ItemType.Type == "NestedObject" && property.ItemType.Properties != nil {
+				argOption.Options = convertMmv1PropertiesToArgOptions(property.ItemType.Properties)
+			}
 		}
 
-		// Copy constraint fields from suboption to argument option
-		if len(suboption.MutuallyExclusive) > 0 {
-			argOption.MutuallyExclusive = suboption.MutuallyExclusive
-		}
-		if len(suboption.RequiredTogether) > 0 {
-			argOption.RequiredTogether = suboption.RequiredTogether
-		}
-		if len(suboption.RequiredOneOf) > 0 {
-			argOption.RequiredOneOf = suboption.RequiredOneOf
-		}
-		if len(suboption.RequiredIf) > 0 {
-			argOption.RequiredIf = suboption.RequiredIf
-		}
-		if len(suboption.RequiredBy) > 0 {
-			argOption.RequiredBy = suboption.RequiredBy
+		// Handle nested dictionary objects (direct suboptions)
+		if argOption.Type == "dict" && property.Properties != nil {
+			argOption.Options = convertMmv1PropertiesToArgOptions(property.Properties)
 		}
 
 		// Set no_log for sensitive fields
-		if isSensitiveField(suboptionName) {
+		if property.Sensitive {
 			argOption.NoLog = true
 		}
 
-		argOptions[suboptionName] = argOption
+		argOptions[argOptionName] = argOption
 	}
 
 	return argOptions
-}
-
-// isSensitiveField determines if a field should be marked as no_log
-func isSensitiveField(fieldName string) bool {
-	sensitivePatterns := []string{
-		"password", "secret", "key", "token", "credential", "auth",
-		"private", "cert", "certificate", "passphrase",
-	}
-
-	lowerName := strings.ToLower(fieldName)
-	for _, pattern := range sensitivePatterns {
-		if strings.Contains(lowerName, pattern) {
-			return true
-		}
-	}
-	return false
 }
 
 // ToString generates the Python argument specification code for the ArgumentSpec
@@ -286,11 +218,6 @@ func (as *ArgumentSpec) ToString() string {
 			builder.WriteString("        no_log=True,\n")
 		}
 
-		// Add aliases
-		if len(argOption.Aliases) > 0 {
-			builder.WriteString(fmt.Sprintf("        aliases=%s,\n", pythonList(argOption.Aliases)))
-		}
-
 		// Add nested options
 		if len(argOption.Options) > 0 {
 			builder.WriteString("        options=dict(\n")
@@ -365,11 +292,6 @@ func (as *ArgumentSpec) writeNestedOptions(builder *strings.Builder, options map
 			builder.WriteString(fmt.Sprintf("%s    no_log=True,\n", indent))
 		}
 
-		// Add aliases
-		if len(option.Aliases) > 0 {
-			builder.WriteString(fmt.Sprintf("%s    aliases=%s,\n", indent, pythonList(option.Aliases)))
-		}
-
 		// Add nested options recursively
 		if len(option.Options) > 0 {
 			builder.WriteString(fmt.Sprintf("%s    options=dict(\n", indent))
@@ -401,12 +323,6 @@ func (as *ArgumentSpec) writeArgumentConstraints(builder *strings.Builder, optio
 	if len(option.RequiredOneOf) > 0 {
 		builder.WriteString(fmt.Sprintf("%srequired_one_of=%s,\n", indent, pythonListOfLists(option.RequiredOneOf)))
 	}
-	if len(option.RequiredIf) > 0 {
-		builder.WriteString(fmt.Sprintf("%srequired_if=%s,\n", indent, pythonRequiredIf(option.RequiredIf)))
-	}
-	if len(option.RequiredBy) > 0 {
-		builder.WriteString(fmt.Sprintf("%srequired_by=%s,\n", indent, pythonRequiredBy(option.RequiredBy)))
-	}
 }
 
 // buildModuleConstraints builds module-level constraint parameters
@@ -422,13 +338,6 @@ func (as *ArgumentSpec) buildModuleConstraints() string {
 	if len(as.RequiredOneOf) > 0 {
 		constraints = append(constraints, fmt.Sprintf("required_one_of=%s", pythonListOfLists(as.RequiredOneOf)))
 	}
-	if len(as.RequiredIf) > 0 {
-		constraints = append(constraints, fmt.Sprintf("required_if=%s", pythonRequiredIf(as.RequiredIf)))
-	}
-	if len(as.RequiredBy) > 0 {
-		constraints = append(constraints, fmt.Sprintf("required_by=%s", pythonRequiredBy(as.RequiredBy)))
-	}
-
 	if len(constraints) == 0 {
 		return ""
 	}
@@ -533,42 +442,4 @@ func pythonListOfLists(items [][]string) string {
 		lists = append(lists, pythonList(subList))
 	}
 	return fmt.Sprintf("[%s]", strings.Join(lists, ", "))
-}
-
-// pythonRequiredIf converts required_if constraints to Python format
-func pythonRequiredIf(items [][]interface{}) string {
-	if len(items) == 0 {
-		return "[]"
-	}
-
-	var constraints []string
-	for _, constraint := range items {
-		var parts []string
-		for _, part := range constraint {
-			parts = append(parts, pythonValue(part))
-		}
-		constraints = append(constraints, fmt.Sprintf("[%s]", strings.Join(parts, ", ")))
-	}
-	return fmt.Sprintf("[%s]", strings.Join(constraints, ", "))
-}
-
-// pythonRequiredBy converts required_by constraints to Python dict format
-func pythonRequiredBy(items map[string][]string) string {
-	if len(items) == 0 {
-		return "dict()"
-	}
-
-	var pairs []string
-	// Sort keys for consistent output
-	keys := make([]string, 0, len(items))
-	for key := range items {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	for _, key := range keys {
-		value := items[key]
-		pairs = append(pairs, fmt.Sprintf("%s=%s", pythonIdentifier(key), pythonList(value)))
-	}
-	return fmt.Sprintf("dict(%s)", strings.Join(pairs, ", "))
 }
