@@ -6,75 +6,14 @@ package ansible
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 
 	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
-	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
 
-const MAX_DESCRIPTION_LENGTH = 120
-
-func (m *Module) String() string {
-	return m.Resource.AnsibleName()
-}
-
-// Type represents the data types supported by Ansible modules
-type Type string
-
-// Ansible module data types as defined in the official documentation
-const (
-	TypeStr     Type = "str"
-	TypeInt     Type = "int"
-	TypeBool    Type = "bool"
-	TypeList    Type = "list"
-	TypeDict    Type = "dict"
-	TypePath    Type = "path"
-	TypeRaw     Type = "raw"
-	TypeJsonarg Type = "jsonarg"
-	TypeBytes   Type = "bytes"
-	TypeBits    Type = "bits"
-	TypeFloat   Type = "float"
-)
-
-// String returns the string representation of the AnsibleType
-func (t Type) String() string {
-	return string(t)
-}
-
-// MapMmv1ToAnsible maps magic-modules API types to Ansible module types
-// Returns AnsibleType enum and error for better error handling
-func MapMmv1ToAnsible(property *mmv1api.Type) Type {
-	if property == nil {
-		return ""
-	}
-
-	switch property.Type {
-	case "String":
-		return TypeStr
-	case "Integer":
-		return TypeInt
-	case "Boolean":
-		return TypeBool
-	case "NestedObject":
-		return TypeDict
-	case "KeyValueAnnotations":
-		return TypeDict
-	case "KeyValueLabels":
-		return TypeDict
-	case "KeyValuePairs":
-		return TypeDict
-	case "Array":
-		return TypeList
-	case "Enum":
-		return TypeStr
-	case "ResourceRef":
-		return TypeDict
-	default:
-		log.Warn().Msgf("unknown API type '%s' defaulting to string", property.Type)
-		return TypeStr
-	}
-}
+const MAX_DESCRIPTION_LENGTH = 140
 
 // parsePropertyDescription converts API property description to Ansible format i.e. multi-line string to list of strings
 func parsePropertyDescription(property *mmv1api.Type) []string {
@@ -88,8 +27,9 @@ func parsePropertyDescription(property *mmv1api.Type) []string {
 	description = strings.TrimPrefix(description, "Optional. ") // the absence of "required" field means optional
 	immutable := strings.HasPrefix(description, "Immutable.")
 	description = strings.TrimPrefix(description, "Immutable. ") // a note is added to the description if the property is immutable
+	description = strings.Join(strings.Split(description, "\n"), " ")
 
-	// Split description by newlines, then by sentences, then by length
+	// Split description by sentences
 	sentences := strings.Split(description, ". ")
 	var cleanLines []string
 
@@ -142,6 +82,9 @@ func ToYAML(data interface{}) string {
 
 	// Walk the node tree and set folded style for description fields
 	setFoldedStyleForDescriptions(node)
+
+	// Sort all map keys for consistent output
+	sortYAMLMapKeys(node)
 
 	err = encoder.Encode(node)
 	if err != nil {
@@ -230,4 +173,53 @@ func breakLineByLength(line string) []string {
 	}
 
 	return chunks
+}
+
+// sortYAMLMapKeys recursively sorts all map keys in a YAML node tree for consistent output
+func sortYAMLMapKeys(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+
+	switch node.Kind {
+	case yaml.MappingNode:
+		// For mapping nodes, we need to sort the key-value pairs by key
+		if len(node.Content)%2 == 0 { // Ensure we have pairs
+			// Create a slice of key-value pairs
+			type kvPair struct {
+				key   *yaml.Node
+				value *yaml.Node
+			}
+
+			var pairs []kvPair
+			for i := 0; i < len(node.Content); i += 2 {
+				pairs = append(pairs, kvPair{
+					key:   node.Content[i],
+					value: node.Content[i+1],
+				})
+			}
+
+			// Sort pairs by key value
+			sort.Slice(pairs, func(i, j int) bool {
+				return pairs[i].key.Value < pairs[j].key.Value
+			})
+
+			// Rebuild the content array with sorted pairs
+			node.Content = make([]*yaml.Node, 0, len(pairs)*2)
+			for _, pair := range pairs {
+				node.Content = append(node.Content, pair.key, pair.value)
+			}
+		}
+
+		// Recursively sort child nodes
+		for _, child := range node.Content {
+			sortYAMLMapKeys(child)
+		}
+
+	case yaml.SequenceNode:
+		// For sequence nodes, just recursively sort child nodes
+		for _, child := range node.Content {
+			sortYAMLMapKeys(child)
+		}
+	}
 }
