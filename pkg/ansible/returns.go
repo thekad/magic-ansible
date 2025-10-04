@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
+	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
 	"github.com/rs/zerolog/log"
 )
 
@@ -34,27 +35,27 @@ func (t ReturnType) ToString() string {
 type ReturnAttribute struct {
 	// Description - detailed description of what this value represents
 	// Required field - string or list of strings, capitalized with trailing dot
-	Description interface{} `yaml:"description" json:"description"`
+	Description interface{} `yaml:"description"`
 
 	// Returned - when this value is returned (e.g., "always", "changed", "success")
 	// Required field - string with human-readable content
-	Returned string `yaml:"returned" json:"returned"`
+	Returned string `yaml:"returned"`
 
 	// Type - data type of the returned value
 	// Required field - one of the ReturnType constants
-	Type ReturnType `yaml:"type" json:"type"`
+	Type ReturnType `yaml:"type"`
 
 	// Elements - if type='list', specifies the data type of the list's elements
 	// Optional field
-	Elements ReturnType `yaml:"elements,omitempty" json:"elements,omitempty"`
+	Elements ReturnType `yaml:"elements,omitempty"`
 
 	// Contains - for nested return values (type: dict, list/elements: dict, or complex)
 	// Optional field - map of nested ReturnAttribute objects
-	Contains map[string]*ReturnAttribute `yaml:"contains,omitempty" json:"contains,omitempty"`
+	Contains map[string]*ReturnAttribute `yaml:"contains,omitempty"`
 }
 
 type ReturnBlock struct {
-	Returns map[string]*ReturnAttribute `yaml:"returns" json:"returns"`
+	Returns map[string]*ReturnAttribute `yaml:"returns"`
 }
 
 func (rb *ReturnBlock) ToString() string {
@@ -124,7 +125,9 @@ func NewReturnBlockFromMmv1(resource *mmv1api.Resource) *ReturnBlock {
 	}
 
 	// Process properties from the API Resource
-	convertedReturns := convertPropertiesToReturns(resource.GettableProperties())
+	convertedReturns := convertPropertiesToReturns(google.Select(resource.GettableProperties(), func(p *mmv1api.Type) bool {
+		return p.Output
+	}))
 
 	// Merge the converted returns with the standard returns
 	for name, returnAttr := range convertedReturns {
