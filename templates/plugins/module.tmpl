@@ -28,13 +28,11 @@ RETURN = r"""
 ################################################################################
 
 from ansible_collections.google.cloud.plugins.module_utils import gcp_utils as gcp
-{{ if $.CustomCode.CustomImport | trimSpace | len | gt 0 -}}
 # BEGIN Custom imports
-{{ $.CustomCode.CustomImport | trimSpace }}
+{{ $.CustomCode.CustomImport -}}
 # END Custom imports
-{{- end }}
 
-def self_link(module):
+def get_self_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
 {{- if strEq .Type "ResourceRef" }}
@@ -47,7 +45,7 @@ def self_link(module):
     )
 
 
-def create_link(module):
+def get_create_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
 {{- if strEq .Type "ResourceRef" }}
@@ -60,7 +58,7 @@ def create_link(module):
     )
 
 
-def update_link(module):
+def get_update_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
 {{- if strEq .Type "ResourceRef" }}
@@ -73,7 +71,7 @@ def update_link(module):
     )
 
 
-def delete_link(module):
+def get_delete_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
 {{- if strEq .Type "ResourceRef" }}
@@ -86,7 +84,7 @@ def delete_link(module):
     )
 
 
-def collection_link(module):
+def get_collection_link(module):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
 {{- if strEq .Type "ResourceRef" }}
@@ -106,27 +104,27 @@ class {{ $option.ClassName }}(gcp.Resource):
     {{- range $suboption := $option.InputSuboptions }}
             "{{ $suboption.Name }}": {{""}}
         {{- if $suboption.IsNestedObject -}}
-            {{ $suboption.ClassName }}(self.params.get("{{ $suboption.AnsibleName }}", {})).to_request(),
+            {{ $suboption.ClassName }}(self.transport.get("{{ $suboption.AnsibleName }}", {})).to_request(),
         {{- else if $suboption.IsNestedList -}}
-            [{{ $suboption.ClassName }}(item).to_request() for item in self.params.get("{{ $suboption.AnsibleName }}", [])],
+            [{{ $suboption.ClassName }}(item).to_request() for item in self.transport.get("{{ $suboption.AnsibleName }}", [])],
         {{- else -}}
-            self.params.get("{{ $suboption.AnsibleName }}"),
+            self.transport.get("{{ $suboption.AnsibleName }}"),
         {{- end }}
         {{- end }}
         }
     {{- end }}
 
 {{- if $option.OutputSuboptions | len | gt 0 }}
-    def _response(self):
+    def _response(self, response: dict):
         return {
     {{- range $suboption := $option.OutputSuboptions }}
             "{{ $suboption.Name }}": {{""}}
         {{- if $suboption.IsNestedObject -}}
-            {{ $suboption.ClassName }}(self.params.get("{{ $suboption.AnsibleName }}", {})).from_response(),
+            {{ $suboption.ClassName }}(response.get("{{ $suboption.AnsibleName }}", {})).from_response(),
         {{- else if $suboption.IsNestedList -}}
-            [{{ $suboption.ClassName }}(item).from_response() for item in self.params.get("{{ $suboption.AnsibleName }}", [])],
+            [{{ $suboption.ClassName }}(item).from_response() for item in response.get("{{ $suboption.AnsibleName }}", [])],
         {{- else -}}
-            self.params.get("{{ $suboption.AnsibleName }}"),
+            response.get("{{ $suboption.AnsibleName }}"),
         {{- end }}
         {{- end }}
         }
@@ -139,36 +137,36 @@ class {{ $.ModuleClass }}(gcp.Resource):
         return {
 {{- range $option := $.InputOptions }}
             "{{ $option.Name }}": {{ if $option.IsNestedObject -}}
-            {{ $option.ClassName }}(self.params.get("{{ $option.AnsibleName }}", {})).to_request(),
+            {{ $option.ClassName }}(self.transport.get("{{ $option.AnsibleName }}", {})).to_request(),
             {{- else if $option.IsList -}}
             [
                 {{- if $option.ElementsAre "NestedObject"  -}}
-                {{ $option.ClassName }}(self.params.get("{{ $option.AnsibleName }}", {})).to_request(),
+                {{ $option.ClassName }}(self.transport.get("{{ $option.AnsibleName }}", {})).to_request(),
                 {{- else -}}
-                self.params.get("{{ $option.AnsibleName }}"),
+                self.transport.get("{{ $option.AnsibleName }}"),
                 {{- end }}
             ],
             {{- else -}}
-            self.params.get("{{ $option.AnsibleName }}"),
+            self.transport.get("{{ $option.AnsibleName }}"),
             {{- end -}}
 {{- end }}
         }
 
-    def _response(self):
+    def _response(self, response: dict):
         return {
 {{- range $option := $.OutputOptions }}
             "{{ $option.Name }}": {{ if $option.IsNestedObject -}}
-            {{ $option.ClassName }}(self.params.get("{{ $option.Name }}", {})).from_response(),
+            {{ $option.ClassName }}(response.get("{{ $option.Name }}", {})).from_response(),
             {{- else if $option.IsList -}}
             [
                 {{- if $option.ElementsAre "NestedObject"  -}}
-                {{ $option.ClassName }}(self.params.get("{{ $option.Name }}", {})).from_response(),
+                {{ $option.ClassName }}(response.get("{{ $option.Name }}", {})).from_response(),
                 {{- else -}}
-                self.params.get("{{ $option.Name }}"),
+                response.get("{{ $option.Name }}"),
                 {{- end }}
             ],
             {{- else -}}
-            self.params.get("{{ $option.Name }}"),
+            response.get("{{ $option.Name }}"),
             {{- end }}
 {{- end }}
         }
@@ -189,35 +187,60 @@ def main():
         module.params["scopes"] = {{ $.Scopes | toJson }}
 
     state = module.params["state"]
-
     changed = False
 
     params = gcp.remove_nones_from_dict(module.params)
+    resource = {{ $.ModuleClass }}(params, module=module, product="{{ $.ProductName }}", kind="{{ $.Kind }}")
+    obj = resource.fetch(get_self_link(module), allow_not_found=True)
 
-    req = {{ $.ModuleClass }}(params, module=module, product="{{ $.ProductName }}", kind="{{ $.Kind }}")
-
-    obj = req.fetch(self_link(module), allow_not_found=True)
-
-    async_op = {{ $.Async.Actions | toJson }}
+    async_ops = {{ $.GetAsyncOps | toJson }}
+    async_link = async_ops.get("base_url")
 
     if obj is None:
         if state == "present":
-            if "create" in async_op:
-                obj = req.create_async(create_link(module), async_link_template="{{ $.BaseUrl }}{{ $.Async.Operation.BaseUrl | toPythonTpl }}")
-            else:
-                obj = resource.create(create_link(module))
-            changed = True
+            create_link = get_create_link(module)
+            create_retries = async_ops["timeouts"]["create"]
+            # BEGIN custom pre-create code
+            {{ $.CustomCode.PreCreate | indent 12 false -}}
+            # END custom pre-create code
+            try:
+                if "create" in async_ops["actions"]:
+                    obj = resource.create_async(
+                        create_link,
+                        async_link=async_link,
+                        retries=create_retries
+                    )
+                else:
+                    obj = resource.create(create_link)
+                changed = True
+            except Exception as e:
+                module.fail_json(msg=str(e))
         else:
             changed = False
     else:
-        pass
+        if state == "absent":
+            delete_link = get_delete_link(module)
+            delete_retries = async_ops["timeouts"]["delete"]
+            # BEGIN custom pre-delete code
+            {{ $.CustomCode.PreDelete | indent 12 false -}}
+            # END custom pre-delete code
+            try:
+                if "delete" in async_ops["actions"]:
+                    obj = resource.delete_async(
+                        delete_link,
+                        async_link=async_link,
+                        retries=delete_retries
+                    )
+                else:
+                    obj = resource.delete(delete_link)
+                changed = True
+            except Exception as e:
+                module.fail_json(msg=str(e))
+        else:
+            pass
 
-    try:
-        rsp = {{ $.ModuleClass }}(obj, module=module, product="{{ $.ProductName }}", kind="{{ $.Kind }}")
-        obj = rsp.from_response()
-    except Exception as e:
-        gcp._trace(exc=e)
-        module.fail_json(msg=str(e))
+    obj = resource.fetch(get_self_link(module), allow_not_found=True)
+    obj = resource.from_response(obj or {})
 
     obj.update({"changed": changed})
     module.exit_json(**obj)
