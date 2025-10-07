@@ -259,11 +259,9 @@ func convertPropertiesToOptions(properties []*mmv1api.Type, parent *Option) map[
 
 	for _, property := range properties {
 		// Skip output-only properties
-		/*
-			if property.Output {
-				continue
-			}
-		*/
+		if property.Output {
+			continue
+		}
 
 		// Create the option
 		option := &Option{
@@ -338,7 +336,7 @@ func (m *Module) Scopes() []string {
 	return m.Resource.Parent.Mmv1.Scopes
 }
 
-func (m *Module) Async() *mmv1api.Async {
+func (m *Module) GetAsync() *mmv1api.Async {
 	return m.Resource.Mmv1.GetAsync()
 }
 
@@ -424,4 +422,16 @@ func sortedOptions(m map[string]*Option) []*Option {
 		return opts[i].Name < opts[j].Name
 	})
 	return opts
+}
+
+func (m *Module) Timeouts() *mmv1api.Timeouts {
+	return m.Resource.Mmv1.GetTimeouts()
+}
+
+func (m *Module) GetAsyncOps() *AsyncOps {
+	return NewAsyncOps(
+		m.BaseUrl()+m.GetAsync().Operation.BaseUrl,
+		m.GetAsync().Actions,
+		m.Resource.Mmv1.GetTimeouts(),
+	)
 }
