@@ -11,21 +11,40 @@ import (
 	mmv1resource "github.com/GoogleCloudPlatform/magic-modules/mmv1/api/resource"
 )
 
-type ExampleBlock struct {
-	Examples []mmv1resource.Examples
+type Examples struct {
+	DocExamples  []mmv1resource.Examples
+	TestExamples []mmv1resource.Examples
 }
 
-func NewExampleBlockFromMmv1(mmv1 *mmv1api.Resource) *ExampleBlock {
-	return &ExampleBlock{
-		Examples: mmv1.Examples,
+func NewExamplesFromMmv1(mmv1 *mmv1api.Resource) *Examples {
+	docExamples := []mmv1resource.Examples{}
+	testExamples := []mmv1resource.Examples{}
+	for _, example := range mmv1.Examples {
+		if !example.ExcludeDocs {
+			docExamples = append(docExamples, example)
+		}
+		if !example.ExcludeTest {
+			testExamples = append(testExamples, example)
+		}
+	}
+	return &Examples{
+		DocExamples:  docExamples,
+		TestExamples: testExamples,
 	}
 }
 
-func (e *ExampleBlock) ToString() string {
-	separator := fmt.Sprintf("%s\n", strings.Repeat("#", 80))
-	examples := []string{}
-	for _, example := range e.Examples {
-		examples = append(examples, example.TestHCLText)
+func (e *Examples) ToString(which string) string {
+	separator := fmt.Sprintf("\n%s\n\n", strings.Repeat("#", 80))
+	exampleStrings := []string{}
+	examples := []mmv1resource.Examples{}
+	switch which {
+	case "doc":
+		examples = e.DocExamples
+	case "test":
+		examples = e.TestExamples
 	}
-	return strings.Join(examples, separator)
+	for _, example := range examples {
+		exampleStrings = append(exampleStrings, example.TestHCLText)
+	}
+	return strings.Join(exampleStrings, separator)
 }

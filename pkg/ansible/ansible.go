@@ -84,18 +84,20 @@ type Module struct {
 	Options           map[string]*Option
 	Documentation     *Documentation
 	Returns           *ReturnBlock
-	Examples          *ExampleBlock
+	Examples          *Examples
 	ArgumentSpec      *ArgumentSpec
+	OperationConfigs  map[string]*OperationConfig
 }
 
 func NewFromResource(resource *api.Resource) *Module {
 	m := &Module{
-		Name:         resource.AnsibleName(),
-		Resource:     resource,
-		Options:      NewOptionsFromMmv1(resource.Mmv1),
-		Examples:     NewExampleBlockFromMmv1(resource.Mmv1),
-		Returns:      NewReturnBlockFromMmv1(resource.Mmv1),
-		ArgumentSpec: NewArgSpecFromMmv1(resource.Mmv1),
+		Name:             resource.AnsibleName(),
+		Resource:         resource,
+		Options:          NewOptionsFromMmv1(resource.Mmv1),
+		Examples:         NewExamplesFromMmv1(resource.Mmv1),
+		Returns:          NewReturnBlockFromMmv1(resource.Mmv1),
+		ArgumentSpec:     NewArgSpecFromMmv1(resource.Mmv1),
+		OperationConfigs: NewOperationConfigsFromMmv1(resource.Mmv1),
 	}
 	log.Info().Msgf("creating documentation for %s", resource.AnsibleName())
 	m.Documentation = NewDocumentationFromOptions(resource, m.Options)
@@ -239,7 +241,9 @@ func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
 	}
 
 	// Process all user properties from the API Resource
-	convertedOptions := convertPropertiesToOptions(resource.AllUserProperties(), nil)
+	convertedOptions := convertPropertiesToOptions(google.Reject(resource.AllUserProperties(), func(p *mmv1api.Type) bool {
+		return p.Output
+	}), nil)
 
 	// Merge the converted options with the state option
 	for name, option := range convertedOptions {
@@ -259,9 +263,11 @@ func convertPropertiesToOptions(properties []*mmv1api.Type, parent *Option) map[
 
 	for _, property := range properties {
 		// Skip output-only properties
-		if property.Output {
-			continue
-		}
+		/*
+			if property.Output {
+				continue
+			}
+		*/
 
 		// Create the option
 		option := &Option{
@@ -422,6 +428,71 @@ func sortedOptions(m map[string]*Option) []*Option {
 		return opts[i].Name < opts[j].Name
 	})
 	return opts
+}
+
+type OperationConfig struct {
+	UriTemplate      string `json:"uri"`
+	AsyncUriTemplate string `json:"async_uri"`
+	Verb             string `json:"verb"`
+	TimeoutMinutes   int    `json:"timeout"`
+}
+
+func NewOperationConfigsFromMmv1(mmv1 *mmv1api.Resource) map[string]*OperationConfig {
+	ops := map[string]*OperationConfig{}
+	timeouts := mmv1.GetTimeouts()
+	defaultVerbs := map[string]string{
+		"read":   "GET",
+		"create": "POST",
+		"update": "PUT",
+		"delete": "DELETE",
+	}
+
+	// Helper function to get verb or default
+	getVerb := func(mmv1Verb, operation string) string {
+		if mmv1Verb != "" {
+			return mmv1Verb
+		}
+		return defaultVerbs[operation]
+	}
+
+	escapeCurlyBraces := func(s string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(s, "{{", "{"), "}}", "}")
+	}
+
+	ops["read"] = &OperationConfig{
+		UriTemplate:      escapeCurlyBraces(mmv1.SelfLinkUri()),
+		Verb:             getVerb(mmv1.ReadVerb, "read"),
+		AsyncUriTemplate: "",
+	}
+	ops["create"] = &OperationConfig{
+		UriTemplate:      escapeCurlyBraces(mmv1.CreateUri()),
+		Verb:             getVerb(mmv1.CreateVerb, "create"),
+		TimeoutMinutes:   timeouts.InsertMinutes,
+		AsyncUriTemplate: "",
+	}
+	ops["update"] = &OperationConfig{
+		UriTemplate:      escapeCurlyBraces(mmv1.UpdateUri()),
+		Verb:             getVerb(mmv1.UpdateVerb, "update"),
+		TimeoutMinutes:   timeouts.UpdateMinutes,
+		AsyncUriTemplate: "",
+	}
+	ops["delete"] = &OperationConfig{
+		UriTemplate:      escapeCurlyBraces(mmv1.DeleteUri()),
+		Verb:             getVerb(mmv1.DeleteVerb, "delete"),
+		TimeoutMinutes:   timeouts.DeleteMinutes,
+		AsyncUriTemplate: "",
+	}
+
+	async := mmv1.GetAsync()
+	if async != nil {
+		for _, action := range async.Actions {
+			ops[strings.ToLower(action)].AsyncUriTemplate = escapeCurlyBraces(async.Operation.BaseUrl)
+		}
+	}
+
+	log.Debug().Msgf("operation configs: %v", ops)
+
+	return ops
 }
 
 func (m *Module) Timeouts() *mmv1api.Timeouts {
