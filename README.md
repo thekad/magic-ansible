@@ -56,7 +56,9 @@ go run .
 | `-resources` | | Comma-separated list of resources to generate |
 | `-no-code` | `false` | Skip code generation |
 | `-no-tests` | `false` | Skip test generation |
+| `-no-format` | `false` | Skip formatting files (i.e. black/yamlfmt) |
 | `-overwrite` | `false` | Overwrite existing files |
+| `-min-version` | `beta` | Minimum version to generate |
 
 ### Environment Variables
 
@@ -106,6 +108,36 @@ go run . -products cloudbuildv2 -overwrite
 
 ```bash
 go run . -templates ./my-templates -products cloudbuildv2
+```
+
+### Skip Code Formatting
+
+Skip running black/yamlfmt on generated files:
+
+```bash
+go run . -products cloudbuildv2 -no-format
+```
+
+### Generate Only Beta Resources
+
+Generate only resources available in beta version:
+
+```bash
+go run . -products cloudbuildv2 -min-version beta
+```
+
+### Skip Code or Test Generation
+
+Generate only tests without code:
+
+```bash
+go run . -products cloudbuildv2 -no-code
+```
+
+Generate only code without tests:
+
+```bash
+go run . -products cloudbuildv2 -no-tests
 ```
 
 ## Overrides
