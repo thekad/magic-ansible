@@ -155,7 +155,7 @@ func (o *Option) OutputOnly() bool {
 		return o.Parent.OutputOnly()
 	}
 
-	return o.Mmv1.Output
+	return o.Mmv1 != nil && o.Mmv1.Output
 }
 
 func (o *Option) SortedSuboptions() []*Option {
@@ -235,7 +235,8 @@ func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
 		return nil
 	}
 
-	options := make(map[string]*Option, 0)
+	// Process all user properties from the API Resource
+	options := convertPropertiesToOptions(resource.AllUserProperties(), nil)
 
 	// Always add the standard 'state' option for GCP resources
 	options["state"] = &Option{
@@ -246,16 +247,6 @@ func NewOptionsFromMmv1(resource *mmv1api.Resource) map[string]*Option {
 		Type:    TypeStr,
 		Default: "present",
 		Choices: []string{"present", "absent"},
-	}
-
-	// Process all user properties from the API Resource
-	convertedOptions := convertPropertiesToOptions(google.Reject(resource.AllUserProperties(), func(p *mmv1api.Type) bool {
-		return p.Output
-	}), nil)
-
-	// Merge the converted options with the state option
-	for name, option := range convertedOptions {
-		options[name] = option
 	}
 
 	return options
@@ -270,12 +261,6 @@ func convertPropertiesToOptions(properties []*mmv1api.Type, parent *Option) map[
 	options := map[string]*Option{}
 
 	for _, property := range properties {
-		// Skip output-only properties
-		/*
-			if property.Output {
-				continue
-			}
-		*/
 
 		// Create the option
 		option := &Option{
@@ -371,34 +356,21 @@ func (m *Module) AllMmv1BodyOptions() []*Option {
 }
 
 func (m *Module) OutputOptions() []*Option {
-	opts := make([]*Option, 0)
-	for _, option := range m.AllMmv1BodyOptions() {
-		if option.OutputOnly() {
-			opts = append(opts, option)
-		}
-	}
-	return opts
+	return google.Select(m.AllMmv1BodyOptions(), func(o *Option) bool {
+		return o.OutputOnly()
+	})
 }
 
 func (m *Module) InputOptions() []*Option {
-	opts := make([]*Option, 0)
-	for _, option := range m.AllMmv1BodyOptions() {
-		if !option.OutputOnly() {
-			opts = append(opts, option)
-		}
-	}
-	return opts
+	return google.Select(m.AllMmv1BodyOptions(), func(o *Option) bool {
+		return !o.OutputOnly()
+	})
 }
 
 func (m *Module) UrlParamOnlyOptions() []*Option {
-	opts := make([]*Option, 0)
-	for _, option := range m.AllMmv1BodyOptions() {
-		if !option.Mmv1.UrlParamOnly {
-			continue
-		}
-		opts = append(opts, option)
-	}
-	return opts
+	return google.Select(m.AllMmv1BodyOptions(), func(o *Option) bool {
+		return o.Mmv1.UrlParamOnly
+	})
 }
 
 func (m *Module) AllNestedOptions() map[string]*Option {
@@ -501,16 +473,4 @@ func NewOperationConfigsFromMmv1(mmv1 *mmv1api.Resource) map[string]*OperationCo
 	log.Debug().Msgf("operation configs: %v", ops)
 
 	return ops
-}
-
-func (m *Module) Timeouts() *mmv1api.Timeouts {
-	return m.Resource.Mmv1.GetTimeouts()
-}
-
-func (m *Module) GetAsyncOps() *AsyncOps {
-	return NewAsyncOps(
-		m.BaseUrl()+m.GetAsync().Operation.BaseUrl,
-		m.GetAsync().Actions,
-		m.Resource.Mmv1.GetTimeouts(),
-	)
 }
