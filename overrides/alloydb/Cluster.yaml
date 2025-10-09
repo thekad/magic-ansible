@@ -1,4 +1,41 @@
+custom_code:
+  pre_create: |
+    secondary_config = module.params.get("secondary_config")
+    cluster_type = module.params.get("cluster_type")
+    if (cluster_type == "SECONDARY" and secondary_config is None) or (cluster_type == "PRIMARY" and secondary_config is not None):
+        module.fail_json(msg="A secondary_config is ONLY needed when cluster_type=SECONDARY")
+
+    # for secondary clusters, the creation link changes slightly
+    if cluster_type == "SECONDARY":
+        create_link = create_link.replace("clusters?clusterId", "clusters:createsecondary?cluster_id")
+  pre_update: |
+    secondary_config = module.params.get("secondary_config")
+    cluster_type = module.params.get("cluster_type")
+    db_version = module.params.get("database_version")
+
+    # validate you're not sending secondary config when cluster is primary and vice versa
+    if (cluster_type == "SECONDARY" and secondary_config is None) or (cluster_type == "PRIMARY" and secondary_config is not None):
+        module.fail_json(msg="A secondary_config is ONLY needed when cluster_type=SECONDARY")
+
+    # handle cluster promotions primary<->secondary
+    if cluster_type != existing_obj.get("clusterType"):
+        module.fail_json(msg="Cluster promotion not supported yet")
+
+    # handle database engine migration
+    if db_version is not None and db_version != existing_obj.get("databaseVersion"):
+        module.fail_json(msg="Database migration not supported yet")
+
+    # finally, need to build the updateMask for the fields in our module
+    update_link += "?updateMask=" + ",".join(resource.dot_fields())
+  pre_delete: |
+    # noop
 examples:
+  - name: alloydb_cluster_ci
+    exclude_docs: true
+  - name: alloydb_cluster_basic
+    exclude_test: true
+  - name: 'alloydb_secondary_cluster_basic'
+    exclude_test: true
   - name: 'alloydb_cluster_before_upgrade'
     _drop: true
   - name: 'alloydb_cluster_after_upgrade'
@@ -6,8 +43,6 @@ examples:
   - name: 'alloydb_cluster_full'
     _drop: true
   - name: 'alloydb_cluster_restore'
-    _drop: true
-  - name: 'alloydb_secondary_cluster_basic'
     _drop: true
   - name: 'alloydb_secondary_cluster_basic_test'
     _drop: true
