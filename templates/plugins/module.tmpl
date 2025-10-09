@@ -69,11 +69,11 @@ class {{ $option.ClassName }}(gcp.Resource):
     {{- range $suboption := $option.OutputSuboptions }}
             "{{ $suboption.Name }}": {{""}}
         {{- if $suboption.IsNestedObject -}}
-            {{ $suboption.ClassName }}().from_response(self.response.get("{{ $suboption.AnsibleName }}", {})),
+            {{ $suboption.ClassName }}().from_response(self.response.get("{{ $suboption.Name }}", {})),
         {{- else if $suboption.IsNestedList -}}
-            [{{ $suboption.ClassName }}().from_response(item) for item in self.response.get("{{ $suboption.AnsibleName }}", [])],
+            [{{ $suboption.ClassName }}().from_response(item) for item in self.response.get("{{ $suboption.Name }}", [])],
         {{- else -}}
-            self.response.get("{{ $suboption.AnsibleName }}"),
+            self.response.get("{{ $suboption.Name }}"),
         {{- end }}
         {{- end }}
         }
