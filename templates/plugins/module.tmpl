@@ -18,7 +18,7 @@ DOCUMENTATION = r"""
 {{ $.Documentation.ToString }}"""
 
 EXAMPLES = r"""
-{{ $.Examples.ToString }}"""
+{{ $.Examples.ToString "doc" }}"""
 
 RETURN = r"""
 {{ $.Returns.ToString }}"""
@@ -32,7 +32,7 @@ from ansible_collections.google.cloud.plugins.module_utils import gcp_utils as g
 {{ $.CustomCode.CustomImport -}}
 # END Custom imports
 
-def get_self_link(module):
+def build_link(module, uri):
     params = module.params
 {{- range $.UrlParamOnlyProperties }}
 {{- if strEq .Type "ResourceRef" }}
@@ -40,61 +40,10 @@ def get_self_link(module):
 {{- end }}
 {{- end }}
 
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.SelfLinkUri | toPythonTpl }}".format(
+    return "{{ $.BaseUrl }}" + uri.format(
         **params
     )
 
-
-def get_create_link(module):
-    params = module.params
-{{- range $.UrlParamOnlyProperties }}
-{{- if strEq .Type "ResourceRef" }}
-    params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
-{{- end }}
-{{- end }}
-
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.CreateUri | toPythonTpl }}".format(
-        **params
-    )
-
-
-def get_update_link(module):
-    params = module.params
-{{- range $.UrlParamOnlyProperties }}
-{{- if strEq .Type "ResourceRef" }}
-    params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
-{{- end }}
-{{- end }}
-
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.UpdateUri | toPythonTpl }}".format(
-        **params
-    )
-
-
-def get_delete_link(module):
-    params = module.params
-{{- range $.UrlParamOnlyProperties }}
-{{- if strEq .Type "ResourceRef" }}
-    params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
-{{- end }}
-{{- end }}
-
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.DeleteUri | toPythonTpl }}".format(
-        **params
-    )
-
-
-def get_collection_link(module):
-    params = module.params
-{{- range $.UrlParamOnlyProperties }}
-{{- if strEq .Type "ResourceRef" }}
-    params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
-{{- end }}
-{{- end }}
-
-    return "{{ $.BaseUrl }}{{ $.Resource.Mmv1.CollectionUrl | toPythonTpl }}".format(
-        **params
-    )
 
 {{ range $option := $.AllNestedOptions -}}
 class {{ $option.ClassName }}(gcp.Resource):
@@ -104,27 +53,27 @@ class {{ $option.ClassName }}(gcp.Resource):
     {{- range $suboption := $option.InputSuboptions }}
             "{{ $suboption.Name }}": {{""}}
         {{- if $suboption.IsNestedObject -}}
-            {{ $suboption.ClassName }}(self.transport.get("{{ $suboption.AnsibleName }}", {})).to_request(),
+            {{ $suboption.ClassName }}(self.request.get("{{ $suboption.AnsibleName }}", {})).to_request(),
         {{- else if $suboption.IsNestedList -}}
-            [{{ $suboption.ClassName }}(item).to_request() for item in self.transport.get("{{ $suboption.AnsibleName }}", [])],
+            [{{ $suboption.ClassName }}(item).to_request() for item in self.request.get("{{ $suboption.AnsibleName }}", [])],
         {{- else -}}
-            self.transport.get("{{ $suboption.AnsibleName }}"),
+            self.request.get("{{ $suboption.AnsibleName }}"),
         {{- end }}
         {{- end }}
         }
     {{- end }}
 
 {{- if $option.OutputSuboptions | len | gt 0 }}
-    def _response(self, response: dict):
+    def _response(self):
         return {
     {{- range $suboption := $option.OutputSuboptions }}
             "{{ $suboption.Name }}": {{""}}
         {{- if $suboption.IsNestedObject -}}
-            {{ $suboption.ClassName }}(response.get("{{ $suboption.AnsibleName }}", {})).from_response(),
+            {{ $suboption.ClassName }}().from_response(self.response.get("{{ $suboption.AnsibleName }}", {})),
         {{- else if $suboption.IsNestedList -}}
-            [{{ $suboption.ClassName }}(item).from_response() for item in response.get("{{ $suboption.AnsibleName }}", [])],
+            [{{ $suboption.ClassName }}().from_response(item) for item in self.response.get("{{ $suboption.AnsibleName }}", [])],
         {{- else -}}
-            response.get("{{ $suboption.AnsibleName }}"),
+            self.response.get("{{ $suboption.AnsibleName }}"),
         {{- end }}
         {{- end }}
         }
@@ -137,36 +86,36 @@ class {{ $.ModuleClass }}(gcp.Resource):
         return {
 {{- range $option := $.InputOptions }}
             "{{ $option.Name }}": {{ if $option.IsNestedObject -}}
-            {{ $option.ClassName }}(self.transport.get("{{ $option.AnsibleName }}", {})).to_request(),
+            {{ $option.ClassName }}(self.request.get("{{ $option.AnsibleName }}", {})).to_request(),
             {{- else if $option.IsList -}}
             [
                 {{- if $option.ElementsAre "NestedObject"  -}}
-                {{ $option.ClassName }}(self.transport.get("{{ $option.AnsibleName }}", {})).to_request(),
+                {{ $option.ClassName }}(self.request.get("{{ $option.AnsibleName }}", {})).to_request(),
                 {{- else -}}
-                self.transport.get("{{ $option.AnsibleName }}"),
+                self.request.get("{{ $option.AnsibleName }}"),
                 {{- end }}
             ],
             {{- else -}}
-            self.transport.get("{{ $option.AnsibleName }}"),
+            self.request.get("{{ $option.AnsibleName }}"),
             {{- end -}}
 {{- end }}
         }
 
-    def _response(self, response: dict):
+    def _response(self):
         return {
 {{- range $option := $.OutputOptions }}
             "{{ $option.Name }}": {{ if $option.IsNestedObject -}}
-            {{ $option.ClassName }}(response.get("{{ $option.Name }}", {})).from_response(),
+            {{ $option.ClassName }}().from_response(self.response.get("{{ $option.Name }}", {})),
             {{- else if $option.IsList -}}
             [
                 {{- if $option.ElementsAre "NestedObject"  -}}
-                {{ $option.ClassName }}(response.get("{{ $option.Name }}", {})).from_response(),
+                {{ $option.ClassName }}().from_response(self.response.get("{{ $option.Name }}", {})),
                 {{- else -}}
-                response.get("{{ $option.Name }}"),
+                self.response.get("{{ $option.Name }}"),
                 {{- end }}
             ],
             {{- else -}}
-            response.get("{{ $option.Name }}"),
+            self.response.get("{{ $option.Name }}"),
             {{- end }}
 {{- end }}
         }
@@ -189,61 +138,93 @@ def main():
     state = module.params["state"]
     changed = False
 
+    op_configs = gcp.ResourceOpConfigs({
+    {{- range $op, $config := $.OperationConfigs }}
+        "{{ $op }}": gcp.ResourceOpConfig(**{{ $config | toJson }}),
+    {{- end }}
+    })
+
     params = gcp.remove_nones_from_dict(module.params)
     resource = {{ $.ModuleClass }}(params, module=module, product="{{ $.ProductName }}", kind="{{ $.Kind }}")
-    obj = resource.fetch(get_self_link(module), allow_not_found=True)
+    existing_obj = resource.get(build_link(module, op_configs.read.uri), allow_not_found=True)
 
-    async_ops = {{ $.GetAsyncOps | toJson }}
-    async_link = async_ops.get("base_url")
-
-    if obj is None:
+    if existing_obj is None:
         if state == "present":
-            create_link = get_create_link(module)
-            create_retries = async_ops["timeouts"]["create"]
-            # BEGIN custom pre-create code
+            is_async = op_configs.create.async_uri != ""
+            create_link = build_link(module, op_configs.create.uri)
+            create_retries = op_configs.create.timeout
+            create_func = getattr(resource, op_configs.create.verb)
+            async_create_func = getattr(resource, op_configs.create.verb + "_async")
+            async_create_link = build_link(module, "") + op_configs.create.async_uri
+            ##### BEGIN custom pre-create code #####
             {{ $.CustomCode.PreCreate | indent 12 false -}}
-            # END custom pre-create code
+            ##### END custom pre-create code #####
             try:
-                if "create" in async_ops["actions"]:
-                    obj = resource.create_async(
+                if is_async:
+                    new_obj = async_create_func(
                         create_link,
-                        async_link=async_link,
+                        async_link=async_create_link,
                         retries=create_retries
                     )
                 else:
-                    obj = resource.create(create_link)
+                    new_obj = create_func(create_link)
                 changed = True
             except Exception as e:
                 module.fail_json(msg=str(e))
         else:
-            changed = False
+            pass  # nothing to do
     else:
         if state == "absent":
-            delete_link = get_delete_link(module)
-            delete_retries = async_ops["timeouts"]["delete"]
-            # BEGIN custom pre-delete code
+            is_async = op_configs.delete.async_uri != ""
+            delete_link = build_link(module, op_configs.delete.uri)
+            delete_retries = op_configs.delete.timeout
+            delete_func = getattr(resource, op_configs.delete.verb)
+            async_delete_func = getattr(resource, op_configs.delete.verb + "_async")
+            async_delete_link = build_link(module, "") + op_configs.delete.async_uri
+            ##### BEGIN custom pre-delete code #####
             {{ $.CustomCode.PreDelete | indent 12 false -}}
-            # END custom pre-delete code
+            ##### END custom pre-delete code #####
             try:
-                if "delete" in async_ops["actions"]:
-                    obj = resource.delete_async(
+                if is_async:
+                    new_obj = async_delete_func(
                         delete_link,
-                        async_link=async_link,
+                        async_link=async_delete_link,
                         retries=delete_retries
                     )
                 else:
-                    obj = resource.delete(delete_link)
+                    new_obj = delete_func(delete_link)
                 changed = True
             except Exception as e:
                 module.fail_json(msg=str(e))
         else:
-            pass
+            if resource.diff(existing_obj):
+                is_async = op_configs.update.async_uri != ""
+                update_link = build_link(module, op_configs.update.uri)
+                update_retries = op_configs.update.timeout
+                update_func = getattr(resource, op_configs.update.verb)
+                async_update_func = getattr(resource, op_configs.update.verb + "_async")
+                async_update_link = build_link(module, "") + op_configs.update.async_uri
+                ##### BEGIN custom pre-update code #####
+                {{ $.CustomCode.PreUpdate | indent 16 false -}}
+                ##### END custom pre-update code #####
+                try:
+                    if is_async:
+                        new_obj = async_update_func(
+                            update_link,
+                            async_link=async_update_link,
+                            retries=update_retries
+                        )
+                    else:
+                        new_obj = update_func(update_link)
+                except Exception as e:
+                    module.fail_json(msg=str(e))
+                changed = resource.diff(new_obj)
 
-    obj = resource.fetch(get_self_link(module), allow_not_found=True)
-    obj = resource.from_response(obj or {})
+    new_obj = resource.get(build_link(module, op_configs.read.uri), allow_not_found=True)
+    new_obj = resource.from_response(new_obj or {})
 
-    obj.update({"changed": changed})
-    module.exit_json(**obj)
+    new_obj.update({"changed": changed})
+    module.exit_json(**new_obj)
 
 
 if __name__ == "__main__":
