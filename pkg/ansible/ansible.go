@@ -100,7 +100,15 @@ func NewFromResource(resource *api.Resource) *Module {
 		OperationConfigs: NewOperationConfigsFromMmv1(resource.Mmv1),
 	}
 	log.Info().Msgf("creating documentation for %s", resource.AnsibleName())
-	m.Documentation = NewDocumentationFromOptions(resource, m.Options)
+	// documentation should exclude output-only options
+	docOptions := make(map[string]*Option, 0)
+	for name, option := range m.Options {
+		if option.OutputOnly() && option.Name != "state" {
+			continue
+		}
+		docOptions[name] = option
+	}
+	m.Documentation = NewDocumentationFromOptions(resource, docOptions)
 
 	return m
 }
