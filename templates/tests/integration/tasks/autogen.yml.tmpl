@@ -1,3 +1,10 @@
 {{ template "autogen_notice" . }}
 ---
-{{ $.Examples.ToString }}
+- name: Main test block
+  block:
+    {{ exec "network_setup" . | indent 4 false }}
+
+    {{ $.Examples.ToString "test" | trimSpace | indent 4 false }}
+
+  always:
+    {{ exec "network_teardown" . | indent 4 false }}

@@ -1,0 +1,25 @@
+- name: Create primary alloydb cluster
+  google.cloud.gcp_alloydb_cluster:
+    cluster_id: "{{`{{ resource_name }}`}}-primary"
+    state: present
+    location: us-central1
+    cluster_type: PRIMARY
+    network_config:
+      network: "projects/{{`{{ gcp_project }}`}}/global/networks/default"
+    project: "{{`{{ gcp_project }}`}}"
+    auth_kind: "{{`{{ gcp_cred_kind }}`}}"
+    service_account_file: "{{`{{ gcp_cred_file }}`}}"
+
+- name: Create secondary cluster attached to primary
+  google.cloud.gcp_alloydb_cluster:
+    cluster_id: "{{`{{ resource_name }}`}}-secondary"
+    state: present
+    location: us-central1
+    cluster_type: SECONDARY
+    network_config:
+      network: "projects/{{`{{ gcp_project }}`}}/global/networks/default"
+    secondary_config:
+      primary_cluster_name: "{{`{{ resource_name }}`}}-primary"
+    project: "{{`{{ gcp_project }}`}}"
+    auth_kind: "{{`{{ gcp_cred_kind }}`}}"
+    service_account_file: "{{`{{ gcp_cred_file }}`}}"
