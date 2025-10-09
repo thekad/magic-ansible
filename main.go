@@ -265,7 +265,7 @@ func main() {
 			if !dontFormatFiles {
 				filePath := path.Join(templateData.ModuleDirectory, fmt.Sprintf("%s.py", m.Name))
 				log.Info().Msgf("formatting ansible module file: %s", filePath)
-				err := formatCode(filePath, "black")
+				err := formatFile(filePath, "black")
 				if err != nil {
 					log.Fatal().Err(err).Msg("failed to format code for ansible module")
 				}
@@ -278,11 +278,20 @@ func main() {
 			if err != nil {
 				log.Fatal().Err(err).Msg("failed to generate tests for ansible module")
 			}
+
+			if !dontFormatFiles {
+				dirPath := path.Join(templateData.IntegrationTestDirectory, m.Name)
+				log.Info().Msgf("formatting integration tests for %s", m.Name)
+				err := formatFile(dirPath, "yamlfmt")
+				if err != nil {
+					log.Fatal().Err(err).Msg("failed to format integration tests for ansible module")
+				}
+			}
 		}
 	}
 }
 
-func formatCode(filePath string, formatType string) error {
+func formatFile(filePath string, formatType string) error {
 	log.Debug().Msgf("running %s on file: %s", formatType, filePath)
 	switch formatType {
 	case "black":
@@ -292,7 +301,18 @@ func formatCode(filePath string, formatType string) error {
 			return runCommand(fmt.Sprintf("%s --quiet --target-version=py38 %s", blackCmd, filePath))
 		}
 	case "yamlfmt":
-		return runCommand(fmt.Sprintf("yamlfmt %s", filePath))
+		if yamlFmtCmd := which("yamlfmt"); yamlFmtCmd == "" {
+			return fmt.Errorf("yamlfmt not found in PATH")
+		} else {
+			options := []string{
+				"max_line_length=0",
+				"indent=2",
+				"indentless_arrays=false",
+				"retain_line_breaks_single=true",
+				"pad_line_comments=2",
+			}
+			return runCommand(fmt.Sprintf("yamlfmt -formatter=%s %s", strings.Join(options, ","), filePath))
+		}
 	}
 	return nil
 }
