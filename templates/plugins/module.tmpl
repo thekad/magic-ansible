@@ -156,9 +156,9 @@ def main():
             create_func = getattr(resource, op_configs.create.verb)
             async_create_func = getattr(resource, op_configs.create.verb + "_async")
             async_create_link = build_link(module, "") + op_configs.create.async_uri
-            ##### BEGIN custom pre-create code #####
+            # --------- BEGIN custom pre-create code ---------
             {{ $.CustomCode.PreCreate | indent 12 false -}}
-            ##### END custom pre-create code #####
+            # --------- END custom pre-create code ---------
             try:
                 if is_async:
                     new_obj = async_create_func(
@@ -181,9 +181,9 @@ def main():
             delete_func = getattr(resource, op_configs.delete.verb)
             async_delete_func = getattr(resource, op_configs.delete.verb + "_async")
             async_delete_link = build_link(module, "") + op_configs.delete.async_uri
-            ##### BEGIN custom pre-delete code #####
+            # --------- BEGIN custom pre-delete code ---------
             {{ $.CustomCode.PreDelete | indent 12 false -}}
-            ##### END custom pre-delete code #####
+            # --------- END custom pre-delete code ---------
             try:
                 if is_async:
                     new_obj = async_delete_func(
@@ -204,9 +204,9 @@ def main():
                 update_func = getattr(resource, op_configs.update.verb)
                 async_update_func = getattr(resource, op_configs.update.verb + "_async")
                 async_update_link = build_link(module, "") + op_configs.update.async_uri
-                ##### BEGIN custom pre-update code #####
+                # --------- BEGIN custom pre-update code ---------
                 {{ $.CustomCode.PreUpdate | indent 16 false -}}
-                ##### END custom pre-update code #####
+                # --------- END custom pre-update code ---------
                 try:
                     if is_async:
                         new_obj = async_update_func(
