@@ -298,20 +298,13 @@ func formatFile(filePath string, formatType string) error {
 		if blackCmd := which("black"); blackCmd == "" {
 			return fmt.Errorf("black not found in PATH")
 		} else {
-			return runCommand(fmt.Sprintf("%s --quiet --target-version=py38 %s", blackCmd, filePath))
+			return runCommand(fmt.Sprintf("%s --quiet %s", blackCmd, filePath), filepath.Dir(filePath))
 		}
 	case "yamlfmt":
 		if yamlFmtCmd := which("yamlfmt"); yamlFmtCmd == "" {
 			return fmt.Errorf("yamlfmt not found in PATH")
 		} else {
-			options := []string{
-				"max_line_length=0",
-				"indent=2",
-				"indentless_arrays=false",
-				"retain_line_breaks_single=true",
-				"pad_line_comments=2",
-			}
-			return runCommand(fmt.Sprintf("yamlfmt -formatter=%s %s", strings.Join(options, ","), filePath))
+			return runCommand("yamlfmt %s", filePath)
 		}
 	}
 	return nil
@@ -327,11 +320,19 @@ func which(name string) string {
 	return ""
 }
 
-func runCommand(command string) error {
-	log.Debug().Msgf("running command: %s", command)
+func runCommand(command string, dir string) error {
 	parts := strings.Split(command, " ")
 	cmd := exec.Command(parts[0], parts[1:]...)
+
+	// Set working directory if provided
+	if dir != "" {
+		log.Debug().Msgf("changing directory to: %s", dir)
+		cmd.Dir = dir
+	}
+
+	log.Debug().Msgf("running command: %s", command)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
 	return cmd.Run()
 }
