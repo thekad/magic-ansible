@@ -118,14 +118,14 @@ func (m *Module) AllMmv1BodyOptions() []*Option {
 }
 
 func (m *Module) OutputOptions() []*Option {
-	return google.Select(m.AllMmv1BodyOptions(), func(o *Option) bool {
-		return o.OutputOnly()
+	return google.Reject(m.AllMmv1BodyOptions(), func(o *Option) bool {
+		return o.UrlParamOnly()
 	})
 }
 
 func (m *Module) InputOptions() []*Option {
-	return google.Select(m.AllMmv1BodyOptions(), func(o *Option) bool {
-		return !o.OutputOnly()
+	return google.Reject(m.AllMmv1BodyOptions(), func(o *Option) bool {
+		return o.Output
 	})
 }
 

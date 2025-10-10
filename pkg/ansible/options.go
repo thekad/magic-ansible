@@ -161,34 +161,23 @@ func (o *Option) SortedSuboptions() []*Option {
 	return sortedOptions(o.Suboptions)
 }
 
+func (o *Option) UrlParamOnly() bool {
+	if o.Mmv1 == nil {
+		return false
+	}
+	return o.Mmv1.UrlParamOnly
+}
+
 func (o *Option) OutputSuboptions() []*Option {
-	options := make([]*Option, 0)
-
-	if o.Suboptions == nil {
-		return options
-	}
-	for _, option := range o.SortedSuboptions() {
-		if option.OutputOnly() {
-			options = append(options, option)
-		}
-	}
-
-	return options
+	return google.Reject(o.SortedSuboptions(), func(o *Option) bool {
+		return o.UrlParamOnly()
+	})
 }
 
 func (o *Option) InputSuboptions() []*Option {
-	options := make([]*Option, 0)
-
-	if o.Suboptions == nil {
-		return options
-	}
-	for _, option := range o.SortedSuboptions() {
-		if !option.OutputOnly() {
-			options = append(options, option)
-		}
-	}
-
-	return options
+	return google.Reject(o.SortedSuboptions(), func(o *Option) bool {
+		return o.Output
+	})
 }
 
 func (o *Option) IsList() bool {
