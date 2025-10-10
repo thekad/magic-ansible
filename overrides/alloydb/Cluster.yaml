@@ -30,19 +30,17 @@ custom_code:
   pre_delete: |
     # noop
 examples:
-  - name: alloydb_cluster_ci
-    exclude_docs: true
   - name: alloydb_cluster_basic
     exclude_test: true
-  - name: 'alloydb_secondary_cluster_basic'
+  - name: alloydb_secondary_cluster_basic
     exclude_test: true
-  - name: 'alloydb_cluster_before_upgrade'
+  - name: alloydb_secondary_cluster_basic_test
+    exclude_docs: true
+  - name: alloydb_cluster_before_upgrade
     _drop: true
-  - name: 'alloydb_cluster_after_upgrade'
+  - name: alloydb_cluster_after_upgrade
     _drop: true
-  - name: 'alloydb_cluster_full'
+  - name: alloydb_cluster_full
     _drop: true
-  - name: 'alloydb_cluster_restore'
-    _drop: true
-  - name: 'alloydb_secondary_cluster_basic_test'
+  - name: alloydb_cluster_restore
     _drop: true

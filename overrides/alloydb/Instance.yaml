@@ -1,0 +1,19 @@
+---
+custom_code:
+  custom_import: |
+    # None
+  pre_create: |
+    # 'templates/terraform/pre_create/alloydb_instance.go.tmpl'
+  pre_delete: |
+    # 'templates/terraform/pre_delete/alloydb_instance.go.tmpl'
+examples:
+  - name: 'alloydb_instance_basic'
+    exclude_test: true
+  - name: 'alloydb_secondary_instance_basic'
+    _drop: true
+  - name: 'alloydb_instance_basic_test'
+    _drop: true
+  - name: 'alloydb_secondary_instance_basic_test'
+    _drop: true
+  - name: 'alloydb_instance_psc_test'
+    _drop: true
