@@ -47,7 +47,9 @@ type Documentation struct {
 func NewDocumentationFromOptions(resource *api.Resource, options map[string]*Option) *Documentation {
 	resourceNotes := []string{
 		fmt.Sprintf("API Reference: U(%s)", resource.Mmv1.References.Api),
-		fmt.Sprintf("Official Documentation: U(%s)", resource.Mmv1.References.Guides["Official Documentation"]),
+	}
+	for name, guide := range resource.Mmv1.References.Guides {
+		resourceNotes = append(resourceNotes, fmt.Sprintf("%s Guide: U(%s)", name, guide))
 	}
 	docFragments := []string{
 		"google.cloud.gcp",
