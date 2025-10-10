@@ -14,20 +14,22 @@ import (
 )
 
 type Module struct {
-	Name              string
-	MutuallyExclusive [][]string
-	RequiredTogether  [][]string
-	RequiredOneOf     [][]string
-	Resource          *api.Resource
-	MinVersion        string
-	Options           map[string]*Option
-	Documentation     *Documentation
-	Returns           *ReturnBlock
-	Examples          *Examples
-	ArgumentSpec      *ArgumentSpec
-	OperationConfigs  map[string]*OperationConfig
+	Name             string
+	Resource         *api.Resource
+	MinVersion       string
+	Options          map[string]*Option
+	Documentation    *Documentation
+	Returns          *ReturnBlock
+	Examples         *Examples
+	ArgumentSpec     *ArgumentSpec
+	OperationConfigs map[string]*OperationConfig
+	Dependencies     *Dependencies
 }
 
+// NewFromResource creates a new Module from an API Resource
+// The rule of thumb for this constructor is to build the options, examples,
+// returns, and operation configs from the Mmv1 API Resource object, and then
+// build the rest of the members based off the options.
 func NewFromResource(resource *api.Resource) *Module {
 	m := &Module{
 		Name:             resource.AnsibleName(),
@@ -35,19 +37,24 @@ func NewFromResource(resource *api.Resource) *Module {
 		Options:          NewOptionsFromMmv1(resource.Mmv1),
 		Examples:         NewExamplesFromMmv1(resource.Mmv1),
 		Returns:          NewReturnBlockFromMmv1(resource.Mmv1),
-		ArgumentSpec:     NewArgSpecFromMmv1(resource.Mmv1),
 		OperationConfigs: NewOperationConfigsFromMmv1(resource.Mmv1),
 	}
-	log.Info().Msgf("creating documentation for %s", resource.AnsibleName())
-	// documentation should exclude output-only options
-	docOptions := make(map[string]*Option, 0)
-	for name, option := range m.Options {
-		if option.OutputOnly() && option.Name != "state" {
+	m.Dependencies = getDependency(m.Options)
+
+	// filter the options to only include input options
+	inputOptions := make(map[string]*Option, 0)
+	for _, option := range m.Options {
+		if option.OutputOnly() {
 			continue
 		}
-		docOptions[name] = option
+		inputOptions[option.AnsibleName()] = option
 	}
-	m.Documentation = NewDocumentationFromOptions(resource, docOptions)
+
+	log.Info().Msgf("creating documentation for %s", resource.AnsibleName())
+	m.Documentation = NewDocumentationFromOptions(resource, inputOptions)
+
+	log.Info().Msgf("creating argument spec for %s", resource.AnsibleName())
+	m.ArgumentSpec = NewArgSpecFromOptions(inputOptions, m.Dependencies)
 
 	return m
 }

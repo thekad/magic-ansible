@@ -7,9 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
-	mmv1api "github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
-	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
 )
 
 // ArgumentSpec represents the argument specification for an Ansible module
@@ -23,9 +20,6 @@ type ArgumentSpec struct {
 
 	// RequiredTogether lists groups of arguments that must be used together
 	RequiredTogether [][]string
-
-	// RequiredOneOf lists groups where at least one argument must be specified
-	RequiredOneOf [][]string
 }
 
 // ArgumentOption represents a single argument in the argument spec
@@ -56,90 +50,71 @@ type ArgumentOption struct {
 
 	// RequiredTogether for nested options
 	RequiredTogether [][]string
-
-	// RequiredOneOf for nested options
-	RequiredOneOf [][]string
 }
 
-// NewArgSpecFromMmv1 creates an ArgumentSpec directly from an MMv1 resource
-// This constructor converts MMv1 resource properties to argument specification format
+// NewArgSpecFromOptions creates an ArgumentSpec from a map of Option structs
+// This constructor converts Ansible module options to argument specification format
 // suitable for Python argument spec generation
-func NewArgSpecFromMmv1(resource *mmv1api.Resource) *ArgumentSpec {
+func NewArgSpecFromOptions(options map[string]*Option, topLevelDepdenncy *Dependencies) *ArgumentSpec {
 	argSpec := &ArgumentSpec{
 		Arguments: make(map[string]*ArgumentOption),
 	}
 
-	if resource == nil {
+	if topLevelDepdenncy != nil {
+		argSpec.MutuallyExclusive = topLevelDepdenncy.MutuallyExclusive
+		argSpec.RequiredTogether = topLevelDepdenncy.RequiredTogether
+	}
+
+	if options == nil {
 		return argSpec
 	}
 
-	// Always add the standard 'state' option for GCP resources
-	argSpec.Arguments["state"] = &ArgumentOption{
-		Type:    "str",
-		Default: "present",
-		Choices: []string{"present", "absent"},
-	}
-
-	// Process all user properties from the API Resource
-	convertedArgOptions := convertMmv1PropertiesToArgOptions(google.Reject(resource.AllUserProperties(), func(p *mmv1api.Type) bool {
-		return p.Output
-	}))
-
-	// Merge the converted options with the state option
-	for name, argOption := range convertedArgOptions {
-		argSpec.Arguments[name] = argOption
+	// Convert each option to an ArgumentOption
+	for name, option := range options {
+		if option.OutputOnly() {
+			continue // Skip output-only options
+		}
+		argSpec.Arguments[name] = convertOptionToArgumentOption(option)
 	}
 
 	return argSpec
 }
 
-// convertMmv1PropertiesToArgOptions converts MMv1 properties directly to ArgumentOptions
-func convertMmv1PropertiesToArgOptions(properties []*mmv1api.Type) map[string]*ArgumentOption {
-	if properties == nil {
+// convertOptionToArgumentOption converts a single Option to an ArgumentOption
+func convertOptionToArgumentOption(option *Option) *ArgumentOption {
+	if option == nil {
 		return nil
 	}
 
-	argOptions := make(map[string]*ArgumentOption)
-
-	for _, property := range properties {
-		// Convert property name to Ansible-style underscore format
-		argOptionName := google.Underscore(property.Name)
-
-		// Create the argument option
-		argOption := &ArgumentOption{
-			Type:    MapMmv1ToAnsible(property).String(),
-			Default: property.DefaultValue,
-			Choices: property.EnumValues,
-		}
-
-		if property.Required && property.DefaultValue == nil {
-			argOption.Required = true
-		}
-
-		// Handle list element types
-		if argOption.Type == "list" && property.ItemType != nil {
-			argOption.Elements = MapMmv1ToAnsible(property.ItemType).String()
-
-			// If the list contains nested objects, create suboptions for the element type
-			if property.ItemType.Type == "NestedObject" && property.ItemType.Properties != nil {
-				argOption.Options = convertMmv1PropertiesToArgOptions(property.ItemType.Properties)
-			}
-		}
-
-		// Handle nested dictionary objects (direct suboptions)
-		if argOption.Type == "dict" && property.Properties != nil {
-			argOption.Options = convertMmv1PropertiesToArgOptions(property.Properties)
-		}
-
-		// Set no_log for sensitive fields
-		if property.Sensitive {
-			argOption.NoLog = true
-		}
-
-		argOptions[argOptionName] = argOption
+	argOption := &ArgumentOption{
+		Type:     option.Type.String(),
+		Required: option.Required,
+		Default:  option.Default,
+		Choices:  option.Choices,
+		NoLog:    option.NoLog,
 	}
 
-	return argOptions
+	if option.Dependencies != nil {
+		argOption.MutuallyExclusive = option.Dependencies.MutuallyExclusive
+		argOption.RequiredTogether = option.Dependencies.RequiredTogether
+	}
+
+	// Handle list element types
+	if option.Elements != "" {
+		argOption.Elements = option.Elements.String()
+	}
+
+	// Handle nested options (suboptions)
+	if len(option.Suboptions) > 0 {
+		argOption.Options = make(map[string]*ArgumentOption)
+		for subName, subOption := range option.Suboptions {
+			if !subOption.OutputOnly() {
+				argOption.Options[subName] = convertOptionToArgumentOption(subOption)
+			}
+		}
+	}
+
+	return argOption
 }
 
 // ToString generates the Python argument specification code for the ArgumentSpec
@@ -320,9 +295,6 @@ func (as *ArgumentSpec) writeArgumentConstraints(builder *strings.Builder, optio
 	if len(option.RequiredTogether) > 0 {
 		builder.WriteString(fmt.Sprintf("%srequired_together=%s,\n", indent, pythonListOfLists(option.RequiredTogether)))
 	}
-	if len(option.RequiredOneOf) > 0 {
-		builder.WriteString(fmt.Sprintf("%srequired_one_of=%s,\n", indent, pythonListOfLists(option.RequiredOneOf)))
-	}
 }
 
 // buildModuleConstraints builds module-level constraint parameters
@@ -334,9 +306,6 @@ func (as *ArgumentSpec) buildModuleConstraints() string {
 	}
 	if len(as.RequiredTogether) > 0 {
 		constraints = append(constraints, fmt.Sprintf("required_together=%s", pythonListOfLists(as.RequiredTogether)))
-	}
-	if len(as.RequiredOneOf) > 0 {
-		constraints = append(constraints, fmt.Sprintf("required_one_of=%s", pythonListOfLists(as.RequiredOneOf)))
 	}
 	if len(constraints) == 0 {
 		return ""

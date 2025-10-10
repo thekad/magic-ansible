@@ -71,6 +71,14 @@ func MapMmv1ToAnsible(property *mmv1api.Type) Type {
 	}
 }
 
+type Dependencies struct {
+	// MutuallyExclusive is optional - list of options that cannot be used together
+	MutuallyExclusive [][]string `yaml:"mutually_exclusive,omitempty"`
+
+	// RequiredTogether is optional - list of options that must be used together
+	RequiredTogether [][]string `yaml:"required_together,omitempty"`
+}
+
 // Option represents a single option in the Ansible module documentation
 // Based on: https://docs.ansible.com/ansible/latest/dev_guide/developing_modules_documenting.html#documentation-block
 type Option struct {
@@ -108,7 +116,16 @@ type Option struct {
 	Suboptions map[string]*Option `yaml:"suboptions,omitempty"`
 
 	// Conflicts is optional - list of options that cannot be used together
-	Conflicts []string `yaml:"conflicts,omitempty"`
+	Conflicts []string `yaml:"-"`
+
+	// RequiredWith is optional - list of options that must be used together with this option
+	RequiredWith []string `yaml:"-"`
+
+	// NoLog is optional - whether this option is sensitive and should not be logged
+	NoLog bool `yaml:"-"`
+
+	// Dependencies is optional - dependency constraints for this option
+	Dependencies *Dependencies `yaml:"-"`
 }
 
 func (o *Option) OutputOnly() bool {
@@ -225,18 +242,20 @@ func convertPropertiesToOptions(properties []*mmv1api.Type, parent *Option) map[
 
 		// Create the option
 		option := &Option{
-			Name:        property.Name,
-			Mmv1:        property,
-			Parent:      parent,
-			Description: parsePropertyDescription(property),
-			Type:        MapMmv1ToAnsible(property),
-			Required:    property.Required,
-			Default:     property.DefaultValue,
-			Choices:     property.EnumValues,
-			Conflicts:   property.Conflicts,
+			Name:         property.Name,
+			Mmv1:         property,
+			Parent:       parent,
+			Description:  parsePropertyDescription(property),
+			Type:         MapMmv1ToAnsible(property),
+			Required:     property.Required,
+			Default:      property.DefaultValue,
+			Choices:      property.EnumValues,
+			Conflicts:    property.Conflicts,
+			RequiredWith: property.RequiredWith,
+			NoLog:        property.Sensitive,
 		}
 
-		log.Debug().Msgf("converted property %s (parent: %v, class name: %s)", property.Name, parent, option.ClassName())
+		// log.Debug().Msgf("converted property %s (parent: %v, class name: %s)", property.Name, parent, option.ClassName())
 
 		// Handle list element types
 		if option.Type == TypeList && property.ItemType != nil {
@@ -251,12 +270,100 @@ func convertPropertiesToOptions(properties []*mmv1api.Type, parent *Option) map[
 		// Handle nested dictionary objects (direct suboptions)
 		if option.Type == TypeDict && property.Properties != nil {
 			option.Suboptions = convertPropertiesToOptions(property.Properties, option)
+			option.Dependencies = getDependency(option.Suboptions)
+			if option.Dependencies != nil {
+				log.Debug().Msgf("option %s has dependency in its suboptions: %+v", option.Name, option.Dependencies)
+			}
 		}
 
 		options[option.AnsibleName()] = option
 	}
 
 	return options
+}
+
+// getDependency analyzes the Conflicts and RequiredWith of each option in the map and creates
+// de-duped permutations for MutuallyExclusive and RequiredTogether. Returns a Dependency struct
+// with MutuallyExclusive and RequiredTogether filled in, or nil if no dependencies are found.
+func getDependency(options map[string]*Option) *Dependencies {
+	if options == nil {
+		return nil
+	}
+
+	var mutuallyExclusive [][]string
+	var requiredTogether [][]string
+	seenMutual := make(map[string]bool)
+	seenRequired := make(map[string]bool)
+
+	for optionName, option := range options {
+		// Handle Conflicts -> MutuallyExclusive
+		if len(option.Conflicts) > 0 {
+			conflicts := make([]string, 0, len(option.Conflicts))
+			for _, conflict := range option.Conflicts {
+				// normalize the conflict base name
+				parts := strings.Split(conflict, ".")
+				conflicts = append(conflicts, parts[len(parts)-1])
+			}
+
+			log.Debug().Msgf("option %s has conflicts with %+v", optionName, conflicts)
+
+			// Create a conflict group with the current option and its conflicts
+			conflictGroup := make([]string, 0, len(conflicts)+1)
+			conflictGroup = append(conflictGroup, optionName)
+			conflictGroup = append(conflictGroup, conflicts...)
+
+			// Sort the group to ensure consistent ordering for deduplication
+			sort.Strings(conflictGroup)
+
+			// Create a key for deduplication
+			key := strings.Join(conflictGroup, ",")
+			if !seenMutual[key] {
+				seenMutual[key] = true
+				mutuallyExclusive = append(mutuallyExclusive, conflictGroup)
+			}
+		}
+
+		// Handle RequiredWith -> RequiredTogether
+		if len(option.RequiredWith) > 0 {
+			requiredWith := make([]string, 0, len(option.RequiredWith))
+			for _, required := range option.RequiredWith {
+				// normalize the required base name
+				parts := strings.Split(required, ".")
+				requiredWith = append(requiredWith, parts[len(parts)-1])
+			}
+
+			log.Debug().Msgf("option %s is required together with %+v", optionName, requiredWith)
+
+			// Create a required group with the current option and its required options
+			requiredGroup := make([]string, 0, len(requiredWith)+1)
+			requiredGroup = append(requiredGroup, optionName)
+			requiredGroup = append(requiredGroup, requiredWith...)
+
+			// Sort the group to ensure consistent ordering for deduplication
+			sort.Strings(requiredGroup)
+
+			// Create a key for deduplication
+			key := strings.Join(requiredGroup, ",")
+			if !seenRequired[key] {
+				seenRequired[key] = true
+				requiredTogether = append(requiredTogether, requiredGroup)
+			}
+		}
+	}
+
+	if len(mutuallyExclusive) == 0 && len(requiredTogether) == 0 {
+		return nil
+	}
+
+	dependency := &Dependencies{}
+	if len(mutuallyExclusive) > 0 {
+		dependency.MutuallyExclusive = mutuallyExclusive
+	}
+	if len(requiredTogether) > 0 {
+		dependency.RequiredTogether = requiredTogether
+	}
+
+	return dependency
 }
 
 func sortedOptions(m map[string]*Option) []*Option {
