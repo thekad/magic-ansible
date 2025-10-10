@@ -13,108 +13,35 @@ import (
 // Based on: https://docs.ansible.com/ansible/latest/dev_guide/developing_program_flow_modules.html#argument-spec
 type ArgumentSpec struct {
 	// Arguments is the main argument specification dictionary
-	Arguments map[string]*ArgumentOption
+	Arguments map[string]*Option
 
-	// MutuallyExclusive lists groups of arguments that cannot be used together
-	MutuallyExclusive [][]string
-
-	// RequiredTogether lists groups of arguments that must be used together
-	RequiredTogether [][]string
-}
-
-// ArgumentOption represents a single argument in the argument spec
-type ArgumentOption struct {
-	// Type specifies the expected data type
-	Type string
-
-	// Required indicates if this argument is mandatory
-	Required bool
-
-	// Default provides the default value
-	Default interface{}
-
-	// Choices lists valid values for the argument
-	Choices []string
-
-	// Elements specifies the type of list elements (when type="list")
-	Elements string
-
-	// Options defines nested arguments (when type="dict")
-	Options map[string]*ArgumentOption
-
-	// NoLog indicates sensitive data that should not be logged
-	NoLog bool
-
-	// MutuallyExclusive for nested options
-	MutuallyExclusive [][]string
-
-	// RequiredTogether for nested options
-	RequiredTogether [][]string
+	// Dependencies is the top-level dependency specification
+	Dependencies *Dependencies
 }
 
 // NewArgSpecFromOptions creates an ArgumentSpec from a map of Option structs
 // This constructor converts Ansible module options to argument specification format
 // suitable for Python argument spec generation
-func NewArgSpecFromOptions(options map[string]*Option, topLevelDepdenncy *Dependencies) *ArgumentSpec {
+func NewArgSpecFromOptions(options map[string]*Option, topLevelDependency *Dependencies) *ArgumentSpec {
 	argSpec := &ArgumentSpec{
-		Arguments: make(map[string]*ArgumentOption),
+		Arguments: make(map[string]*Option),
 	}
 
-	if topLevelDepdenncy != nil {
-		argSpec.MutuallyExclusive = topLevelDepdenncy.MutuallyExclusive
-		argSpec.RequiredTogether = topLevelDepdenncy.RequiredTogether
-	}
+	argSpec.Dependencies = topLevelDependency
 
 	if options == nil {
 		return argSpec
 	}
 
-	// Convert each option to an ArgumentOption
+	// Add each option directly to the ArgumentSpec
 	for name, option := range options {
 		if option.OutputOnly() {
 			continue // Skip output-only options
 		}
-		argSpec.Arguments[name] = convertOptionToArgumentOption(option)
+		argSpec.Arguments[name] = option
 	}
 
 	return argSpec
-}
-
-// convertOptionToArgumentOption converts a single Option to an ArgumentOption
-func convertOptionToArgumentOption(option *Option) *ArgumentOption {
-	if option == nil {
-		return nil
-	}
-
-	argOption := &ArgumentOption{
-		Type:     option.Type.String(),
-		Required: option.Required,
-		Default:  option.Default,
-		Choices:  option.Choices,
-		NoLog:    option.NoLog,
-	}
-
-	if option.Dependencies != nil {
-		argOption.MutuallyExclusive = option.Dependencies.MutuallyExclusive
-		argOption.RequiredTogether = option.Dependencies.RequiredTogether
-	}
-
-	// Handle list element types
-	if option.Elements != "" {
-		argOption.Elements = option.Elements.String()
-	}
-
-	// Handle nested options (suboptions)
-	if len(option.Suboptions) > 0 {
-		argOption.Options = make(map[string]*ArgumentOption)
-		for subName, subOption := range option.Suboptions {
-			if !subOption.OutputOnly() {
-				argOption.Options[subName] = convertOptionToArgumentOption(subOption)
-			}
-		}
-	}
-
-	return argOption
 }
 
 // ToString generates the Python argument specification code for the ArgumentSpec
@@ -160,48 +87,46 @@ func (as *ArgumentSpec) ToString() string {
 
 	// Generate argument specifications
 	for i, argName := range argNames {
-		argOption := as.Arguments[argName]
+		option := as.Arguments[argName]
 		builder.WriteString(fmt.Sprintf("    %s=dict(\n", pythonIdentifier(argName)))
 
 		// Add type
-		if argOption.Type != "" {
-			builder.WriteString(fmt.Sprintf("        type=%s,\n", pythonQuote(argOption.Type)))
-		}
+		builder.WriteString(fmt.Sprintf("        type=%s,\n", pythonQuote(option.Type.String())))
 
 		// Add required
-		if argOption.Required {
+		if option.Required {
 			builder.WriteString("        required=True,\n")
 		}
 
 		// Add default
-		if argOption.Default != nil {
-			builder.WriteString(fmt.Sprintf("        default=%s,\n", pythonValue(argOption.Default)))
+		if option.Default != nil {
+			builder.WriteString(fmt.Sprintf("        default=%s,\n", pythonValue(option.Default)))
 		}
 
 		// Add choices
-		if len(argOption.Choices) > 0 {
-			builder.WriteString(fmt.Sprintf("        choices=%s,\n", pythonList(argOption.Choices)))
+		if len(option.Choices) > 0 {
+			builder.WriteString(fmt.Sprintf("        choices=%s,\n", pythonList(option.Choices)))
 		}
 
 		// Add elements for list types
-		if argOption.Elements != "" {
-			builder.WriteString(fmt.Sprintf("        elements=%s,\n", pythonQuote(argOption.Elements)))
+		if option.Elements != "" {
+			builder.WriteString(fmt.Sprintf("        elements=%s,\n", pythonQuote(option.Elements.String())))
 		}
 
 		// Add no_log
-		if argOption.NoLog {
+		if option.NoLog {
 			builder.WriteString("        no_log=True,\n")
 		}
 
 		// Add nested options
-		if len(argOption.Options) > 0 {
+		if len(option.Suboptions) > 0 {
 			builder.WriteString("        options=dict(\n")
-			as.writeNestedOptions(&builder, argOption.Options, "            ")
+			as.writeNestedOptions(&builder, option.Suboptions, "            ")
 			builder.WriteString("        ),\n")
 		}
 
 		// Add dependency constraints for this argument
-		as.writeArgumentConstraints(&builder, argOption, "        ")
+		as.writeArgumentConstraints(&builder, option, "        ")
 
 		builder.WriteString("    )")
 
@@ -225,7 +150,7 @@ func (as *ArgumentSpec) ToString() string {
 }
 
 // writeNestedOptions recursively writes nested argument options using dict() constructor
-func (as *ArgumentSpec) writeNestedOptions(builder *strings.Builder, options map[string]*ArgumentOption, indent string) {
+func (as *ArgumentSpec) writeNestedOptions(builder *strings.Builder, options map[string]*Option, indent string) {
 	// Sort option names for consistent output
 	optionNames := make([]string, 0, len(options))
 	for name := range options {
@@ -239,7 +164,7 @@ func (as *ArgumentSpec) writeNestedOptions(builder *strings.Builder, options map
 
 		// Add type
 		if option.Type != "" {
-			builder.WriteString(fmt.Sprintf("%s    type=%s,\n", indent, pythonQuote(option.Type)))
+			builder.WriteString(fmt.Sprintf("%s    type=%s,\n", indent, pythonQuote(option.Type.String())))
 		}
 
 		// Add required
@@ -259,7 +184,7 @@ func (as *ArgumentSpec) writeNestedOptions(builder *strings.Builder, options map
 
 		// Add elements for list types
 		if option.Elements != "" {
-			builder.WriteString(fmt.Sprintf("%s    elements=%s,\n", indent, pythonQuote(option.Elements)))
+			builder.WriteString(fmt.Sprintf("%s    elements=%s,\n", indent, pythonQuote(option.Elements.String())))
 		}
 
 		// Add no_log
@@ -268,9 +193,9 @@ func (as *ArgumentSpec) writeNestedOptions(builder *strings.Builder, options map
 		}
 
 		// Add nested options recursively
-		if len(option.Options) > 0 {
+		if len(option.Suboptions) > 0 {
 			builder.WriteString(fmt.Sprintf("%s    options=dict(\n", indent))
-			as.writeNestedOptions(builder, option.Options, indent+"        ")
+			as.writeNestedOptions(builder, option.Suboptions, indent+"        ")
 			builder.WriteString(fmt.Sprintf("%s    ),\n", indent))
 		}
 
@@ -288,12 +213,14 @@ func (as *ArgumentSpec) writeNestedOptions(builder *strings.Builder, options map
 }
 
 // writeArgumentConstraints writes dependency constraints for an argument using dict() constructor syntax
-func (as *ArgumentSpec) writeArgumentConstraints(builder *strings.Builder, option *ArgumentOption, indent string) {
-	if len(option.MutuallyExclusive) > 0 {
-		builder.WriteString(fmt.Sprintf("%smutually_exclusive=%s,\n", indent, pythonListOfLists(option.MutuallyExclusive)))
-	}
-	if len(option.RequiredTogether) > 0 {
-		builder.WriteString(fmt.Sprintf("%srequired_together=%s,\n", indent, pythonListOfLists(option.RequiredTogether)))
+func (as *ArgumentSpec) writeArgumentConstraints(builder *strings.Builder, option *Option, indent string) {
+	if option.Dependencies != nil {
+		if len(option.Dependencies.MutuallyExclusive) > 0 {
+			builder.WriteString(fmt.Sprintf("%smutually_exclusive=%s,\n", indent, pythonListOfLists(option.Dependencies.MutuallyExclusive)))
+		}
+		if len(option.Dependencies.RequiredTogether) > 0 {
+			builder.WriteString(fmt.Sprintf("%srequired_together=%s,\n", indent, pythonListOfLists(option.Dependencies.RequiredTogether)))
+		}
 	}
 }
 
@@ -301,11 +228,14 @@ func (as *ArgumentSpec) writeArgumentConstraints(builder *strings.Builder, optio
 func (as *ArgumentSpec) buildModuleConstraints() string {
 	var constraints []string
 
-	if len(as.MutuallyExclusive) > 0 {
-		constraints = append(constraints, fmt.Sprintf("mutually_exclusive=%s", pythonListOfLists(as.MutuallyExclusive)))
+	if as.Dependencies == nil {
+		return ""
 	}
-	if len(as.RequiredTogether) > 0 {
-		constraints = append(constraints, fmt.Sprintf("required_together=%s", pythonListOfLists(as.RequiredTogether)))
+	if len(as.Dependencies.MutuallyExclusive) > 0 {
+		constraints = append(constraints, fmt.Sprintf("mutually_exclusive=%s", pythonListOfLists(as.Dependencies.MutuallyExclusive)))
+	}
+	if len(as.Dependencies.RequiredTogether) > 0 {
+		constraints = append(constraints, fmt.Sprintf("required_together=%s", pythonListOfLists(as.Dependencies.RequiredTogether)))
 	}
 	if len(constraints) == 0 {
 		return ""

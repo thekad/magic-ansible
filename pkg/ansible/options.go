@@ -124,6 +124,9 @@ type Option struct {
 	// NoLog is optional - whether this option is sensitive and should not be logged
 	NoLog bool `yaml:"-"`
 
+	// Output is optional - whether this option is output-only
+	Output bool `yaml:"-"`
+
 	// Dependencies is optional - dependency constraints for this option
 	Dependencies *Dependencies `yaml:"-"`
 }
@@ -134,6 +137,24 @@ func (o *Option) OutputOnly() bool {
 	}
 
 	return o.Mmv1 != nil && o.Mmv1.Output
+}
+
+func (o *Option) IsOutput() bool {
+	// Check if this option itself has output
+	if o.Output {
+		return true
+	}
+
+	// Recursively check all suboptions
+	if o.Suboptions != nil {
+		for _, suboption := range o.Suboptions {
+			if suboption.IsOutput() {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (o *Option) SortedSuboptions() []*Option {
@@ -253,6 +274,7 @@ func convertPropertiesToOptions(properties []*mmv1api.Type, parent *Option) map[
 			Conflicts:    property.Conflicts,
 			RequiredWith: property.RequiredWith,
 			NoLog:        property.Sensitive,
+			Output:       property.Output,
 		}
 
 		// log.Debug().Msgf("converted property %s (parent: %v, class name: %s)", property.Name, parent, option.ClassName())
