@@ -71,7 +71,7 @@ func MapMmv1ToAnsible(property *mmv1api.Type) Type {
 	}
 }
 
-type Dependencies struct {
+type Dependency struct {
 	// MutuallyExclusive is optional - list of options that cannot be used together
 	MutuallyExclusive [][]string `yaml:"mutually_exclusive,omitempty"`
 
@@ -127,8 +127,8 @@ type Option struct {
 	// Output is optional - whether this option is output-only
 	Output bool `yaml:"-"`
 
-	// Dependencies is optional - dependency constraints for this option
-	Dependencies *Dependencies `yaml:"-"`
+	// Dependency is optional - dependency constraints for this option
+	Dependency *Dependency `yaml:"-"`
 }
 
 func (o *Option) OutputOnly() bool {
@@ -281,9 +281,9 @@ func convertPropertiesToOptions(properties []*mmv1api.Type, parent *Option) map[
 		// Handle nested dictionary objects (direct suboptions)
 		if option.Type == TypeDict && property.Properties != nil {
 			option.Suboptions = convertPropertiesToOptions(property.Properties, option)
-			option.Dependencies = getDependency(option.Suboptions)
-			if option.Dependencies != nil {
-				log.Debug().Msgf("option %s has dependency in its suboptions: %+v", option.Name, option.Dependencies)
+			option.Dependency = getDependency(option.Suboptions)
+			if option.Dependency != nil {
+				log.Debug().Msgf("option %s has dependency in its suboptions: %+v", option.Name, option.Dependency)
 			}
 		}
 
@@ -296,7 +296,7 @@ func convertPropertiesToOptions(properties []*mmv1api.Type, parent *Option) map[
 // getDependency analyzes the Conflicts and RequiredWith of each option in the map and creates
 // de-duped permutations for MutuallyExclusive and RequiredTogether. Returns a Dependency struct
 // with MutuallyExclusive and RequiredTogether filled in, or nil if no dependencies are found.
-func getDependency(options map[string]*Option) *Dependencies {
+func getDependency(options map[string]*Option) *Dependency {
 	if options == nil {
 		return nil
 	}
@@ -366,7 +366,7 @@ func getDependency(options map[string]*Option) *Dependencies {
 		return nil
 	}
 
-	dependency := &Dependencies{}
+	dependency := &Dependency{}
 	if len(mutuallyExclusive) > 0 {
 		dependency.MutuallyExclusive = mutuallyExclusive
 	}

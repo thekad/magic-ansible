@@ -16,13 +16,13 @@ type ArgumentSpec struct {
 	Arguments map[string]*Option
 
 	// Dependencies is the top-level dependency specification
-	Dependencies *Dependencies
+	Dependencies *Dependency
 }
 
 // NewArgSpecFromOptions creates an ArgumentSpec from a map of Option structs
 // This constructor converts Ansible module options to argument specification format
 // suitable for Python argument spec generation
-func NewArgSpecFromOptions(options map[string]*Option, topLevelDependency *Dependencies) *ArgumentSpec {
+func NewArgSpecFromOptions(options map[string]*Option, topLevelDependency *Dependency) *ArgumentSpec {
 	argSpec := &ArgumentSpec{
 		Arguments: make(map[string]*Option),
 	}
@@ -214,12 +214,12 @@ func (as *ArgumentSpec) writeNestedOptions(builder *strings.Builder, options map
 
 // writeArgumentConstraints writes dependency constraints for an argument using dict() constructor syntax
 func (as *ArgumentSpec) writeArgumentConstraints(builder *strings.Builder, option *Option, indent string) {
-	if option.Dependencies != nil {
-		if len(option.Dependencies.MutuallyExclusive) > 0 {
-			builder.WriteString(fmt.Sprintf("%smutually_exclusive=%s,\n", indent, pythonListOfLists(option.Dependencies.MutuallyExclusive)))
+	if option.Dependency != nil {
+		if len(option.Dependency.MutuallyExclusive) > 0 {
+			builder.WriteString(fmt.Sprintf("%smutually_exclusive=%s,\n", indent, pythonListOfLists(option.Dependency.MutuallyExclusive)))
 		}
-		if len(option.Dependencies.RequiredTogether) > 0 {
-			builder.WriteString(fmt.Sprintf("%srequired_together=%s,\n", indent, pythonListOfLists(option.Dependencies.RequiredTogether)))
+		if len(option.Dependency.RequiredTogether) > 0 {
+			builder.WriteString(fmt.Sprintf("%srequired_together=%s,\n", indent, pythonListOfLists(option.Dependency.RequiredTogether)))
 		}
 	}
 }

@@ -23,7 +23,7 @@ type Module struct {
 	Examples         *Examples
 	ArgumentSpec     *ArgumentSpec
 	OperationConfigs map[string]*OperationConfig
-	Dependencies     *Dependencies
+	Dependency       *Dependency
 }
 
 // NewFromResource creates a new Module from an API Resource
@@ -39,7 +39,7 @@ func NewFromResource(resource *api.Resource) *Module {
 		Returns:          NewReturnBlockFromMmv1(resource.Mmv1),
 		OperationConfigs: NewOperationConfigsFromMmv1(resource.Mmv1),
 	}
-	m.Dependencies = getDependency(m.Options)
+	m.Dependency = getDependency(m.Options)
 
 	// filter the options to only include input options
 	inputOptions := make(map[string]*Option, 0)
@@ -54,7 +54,7 @@ func NewFromResource(resource *api.Resource) *Module {
 	m.Documentation = NewDocumentationFromOptions(resource, inputOptions)
 
 	log.Info().Msgf("creating argument spec for %s", resource.AnsibleName())
-	m.ArgumentSpec = NewArgSpecFromOptions(inputOptions, m.Dependencies)
+	m.ArgumentSpec = NewArgSpecFromOptions(inputOptions, m.Dependency)
 
 	return m
 }
