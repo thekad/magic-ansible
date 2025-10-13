@@ -304,7 +304,7 @@ func formatFile(filePath string, formatType string) error {
 		if yamlFmtCmd := which("yamlfmt"); yamlFmtCmd == "" {
 			return fmt.Errorf("yamlfmt not found in PATH")
 		} else {
-			return runCommand("yamlfmt %s", filePath)
+			return runCommand(fmt.Sprintf("yamlfmt %s", filePath), filePath)
 		}
 	}
 	return nil
