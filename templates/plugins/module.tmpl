@@ -33,7 +33,7 @@ from ansible_collections.google.cloud.plugins.module_utils import gcp_utils as g
 # END Custom imports
 
 def build_link(module, uri):
-    params = module.params
+    params = module.params.copy()
 {{- range $.UrlParamOnlyProperties }}
 {{- if strEq .Type "ResourceRef" }}
     params["{{ .Name | underscore -}}"] = gcp.replace_resource_dict(module.params["{{ .Name | underscore -}}"], "{{ .Imports }}")
@@ -55,7 +55,7 @@ class {{ $option.ClassName }}(gcp.Resource):
         {{- if $suboption.IsNestedObject -}}
             {{ $suboption.ClassName }}(self.request.get("{{ $suboption.AnsibleName }}", {})).to_request(),
         {{- else if $suboption.IsNestedList -}}
-            [{{ $suboption.ClassName }}(item).to_request() for item in self.request.get("{{ $suboption.AnsibleName }}", [])],
+            [{{ $suboption.ClassName }}(item).to_request() for item in (self.request.get("{{ $suboption.AnsibleName }}") or [])],
         {{- else -}}
             self.request.get("{{ $suboption.AnsibleName }}"),
         {{- end }}
@@ -71,7 +71,7 @@ class {{ $option.ClassName }}(gcp.Resource):
         {{- if $suboption.IsNestedObject -}}
             {{ $suboption.ClassName }}().from_response(self.response.get("{{ $suboption.Name }}", {})),
         {{- else if $suboption.IsNestedList -}}
-            [{{ $suboption.ClassName }}().from_response(item) for item in self.response.get("{{ $suboption.Name }}", [])],
+            [{{ $suboption.ClassName }}().from_response(item) for item in (self.response.get("{{ $suboption.Name }}") or [])],
         {{- else -}}
             self.response.get("{{ $suboption.Name }}"),
         {{- end }}
