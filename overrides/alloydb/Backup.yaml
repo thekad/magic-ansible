@@ -1,0 +1,9 @@
+examples:
+  - name: "alloydb_backup_basic"
+    exclude_test: true
+  - name: "alloydb_backup_basic_test"
+    exclude_docs: true
+  - name: "alloydb_backup_full"
+    _drop: true
+  - name: "alloydb_backup_full_test"
+    _drop: true
