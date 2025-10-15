@@ -87,14 +87,10 @@ class {{ $.ModuleClass }}(gcp.Resource):
 {{- range $option := $.InputOptions }}
             "{{ $option.Name }}": {{ if $option.IsNestedObject -}}
             {{ $option.ClassName }}(self.request.get("{{ $option.AnsibleName }}", {})).to_request(),
+            {{- else if $option.IsNestedList -}}
+            [{{ $option.ClassName }}(item).to_request() for item in (self.request.get("{{ $option.AnsibleName }}") or [])],
             {{- else if $option.IsList -}}
-            [
-                {{- if $option.ElementsAre "NestedObject"  -}}
-                {{ $option.ClassName }}(self.request.get("{{ $option.AnsibleName }}", {})).to_request(),
-                {{- else -}}
-                self.request.get("{{ $option.AnsibleName }}"),
-                {{- end }}
-            ],
+            [{{ $option.Elements }}(item) for item in (self.request.get("{{ $option.AnsibleName }}") or [])],
             {{- else -}}
             self.request.get("{{ $option.AnsibleName }}"),
             {{- end -}}
@@ -106,14 +102,10 @@ class {{ $.ModuleClass }}(gcp.Resource):
 {{- range $option := $.OutputOptions }}
             "{{ $option.Name }}": {{ if $option.IsNestedObject -}}
             {{ $option.ClassName }}().from_response(self.response.get("{{ $option.Name }}", {})),
+            {{- else if $option.IsNestedList -}}
+            [{{ $option.ClassName }}().from_response(item) for item in (self.response.get("{{ $option.Name }}") or [])],
             {{- else if $option.IsList -}}
-            [
-                {{- if $option.ElementsAre "NestedObject"  -}}
-                {{ $option.ClassName }}().from_response(self.response.get("{{ $option.Name }}", {})),
-                {{- else -}}
-                self.response.get("{{ $option.Name }}"),
-                {{- end }}
-            ],
+            [{{ $option.Elements }}(item) for item in (self.response.get("{{ $option.Name }}") or [])],
             {{- else -}}
             self.response.get("{{ $option.Name }}"),
             {{- end }}
