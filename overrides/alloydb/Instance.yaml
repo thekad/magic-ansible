@@ -9,11 +9,16 @@ custom_code:
 examples:
   - name: 'alloydb_instance_basic'
     exclude_test: true
-  - name: 'alloydb_secondary_instance_basic'
-    _drop: true
   - name: 'alloydb_instance_basic_test'
+    exclude_docs: true
+  - name: 'alloydb_secondary_instance_basic'
     _drop: true
   - name: 'alloydb_secondary_instance_basic_test'
     _drop: true
   - name: 'alloydb_instance_psc_test'
     _drop: true
+properties:
+  - name: instanceType
+    description: |
+      The type of the instance.
+      If the instance type is SECONDARY, point to the cluster_type of the associated secondary cluster instead of mentioning SECONDARY.
