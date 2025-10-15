@@ -14,7 +14,7 @@ type OperationConfig struct {
 	UriTemplate      string `json:"uri"`
 	AsyncUriTemplate string `json:"async_uri"`
 	Verb             string `json:"verb"`
-	TimeoutMinutes   int    `json:"timeout"`
+	TimeoutMinutes   int    `json:"timeout_minutes"`
 }
 
 func NewOperationConfigsFromMmv1(mmv1 *mmv1api.Resource) map[string]*OperationConfig {
