@@ -12,8 +12,8 @@ import (
 	gotpl "text/template"
 	"time"
 
-	"github.com/GoogleCloudPlatform/magic-modules/mmv1/api"
 	"github.com/GoogleCloudPlatform/magic-modules/mmv1/google"
+	"github.com/thekad/magic-ansible/pkg/ansible"
 )
 
 func funcMap() gotpl.FuncMap {
@@ -28,20 +28,20 @@ func funcMap() gotpl.FuncMap {
 		"lte":   lteFunc,
 		"ne":    neFunc,
 		// String functions
-		"concat":        concatFunc,
-		"indent":        indentFunc,
-		"lines":         splitLinesFunc,
-		"now":           time.Now,
-		"singular":      singularFunc,
-		"strEq":         strings.EqualFold,
-		"trim":          strings.Trim,
-		"trimSpace":     strings.TrimSpace,
-		"resource_name": resourceNameFunc, // this is cheating a bit, but it's useful for templates
-		"toJson":        tojsonFunc,
-		"toPythonTpl":   toPythonTpl,
+		"concat":      concatFunc,
+		"indent":      indentFunc,
+		"lines":       splitLinesFunc,
+		"now":         time.Now,
+		"singular":    singularFunc,
+		"strEq":       strings.EqualFold,
+		"trim":        strings.Trim,
+		"trimSpace":   strings.TrimSpace,
+		"toJson":      tojsonFunc,
+		"toPythonTpl": toPythonTpl,
 		// misc functions
-		"list":       listFunc, // for passing arguments to template fragments
-		"sortedKeys": sortedKeysFunc,
+		"list":          listFunc, // for passing arguments to template fragments
+		"sortedKeys":    sortedKeysFunc,
+		"mmv1ToAnsible": ansible.MapMmv1ToAnsible,
 	}
 	// Copy google template functions
 	maps.Copy(funcMap, google.TemplateFunctions)
@@ -174,11 +174,6 @@ func concatFunc(items ...string) string {
 // Usage in templates: {{ isNil .SomeVariable }}
 func isNilFunc(v interface{}) bool {
 	return v == nil
-}
-
-// resourceNameFunc returns a constant string "{{ resource_name }}"
-func resourceNameFunc(resource *api.Resource) string {
-	return "resource_name"
 }
 
 // tojsonFunc returns the JSON representation of the given value
